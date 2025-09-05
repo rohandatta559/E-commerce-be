@@ -1,0 +1,12 @@
+# dependencies
+node_modules/
+
+# environment variables
+.env
+
+# lock files (optional, depends on team rules)
+package-lock.json
+
+# build output (if any)
+dist/
+build/

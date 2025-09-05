@@ -25,3 +25,29 @@ export const createProduct = async (req, res) => {
     res.status(400).json({ message: err.message });
   }
 };
+
+export const deleteProduct = async (req, res) => {
+  const { name } = req.body;
+  try {
+    console.log('Deleting product:', { name });
+    const product = await Product.findOneAndDelete({ name });
+    console.log('Product deleted successfully:', product);
+    res.status(201).json(product);
+  } catch (err) {
+    console.error('Error deleting product:', err.message);
+    res.status(400).json({ message: err.message });
+  }
+};
+
+export const updateProduct =async(req,res)=>{
+  const { name, price, description, category, stock } = req.body;
+  try {
+    console.log('Updating product:', { name, price, description, category, stock });
+    const product = await Product.findOneAndUpdate({ name }, { name, price, description, category, stock });
+    console.log('Product updated successfully:', product);
+    res.status(201).json(product);
+  } catch (err) {
+    console.error('Error updating product:', err.message);
+    res.status(400).json({ message: err.message });
+  }
+}

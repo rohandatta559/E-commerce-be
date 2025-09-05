@@ -19,17 +19,33 @@ connectDB();
 
 const app = express();
 
-// Apply security middleware
-app.use(securityMiddleware);
+// Parse JSON bodies first
+app.use(express.json());
 
-// Enable CORS
+// Enable CORS before security middleware
+const allowedOrigins = [
+  process.env.FRONTEND_URL,
+  'http://localhost:3000',
+  'http://localhost:3001'
+].filter(Boolean);
+
 app.use(cors({
-  origin: process.env.FRONTEND_URL || 'http://localhost:3000',
-  credentials: true
+  origin: function (origin, callback) {
+    // Allow requests with no origin (like mobile apps or curl requests)
+    if (!origin) return callback(null, true);
+    if (allowedOrigins.indexOf(origin) === -1) {
+      const msg = 'The CORS policy for this site does not allow access from the specified Origin.';
+      return callback(new Error(msg), false);
+    }
+    return callback(null, true);
+  },
+  credentials: true,
+  methods: ['GET', 'POST', 'PUT', 'DELETE', 'OPTIONS'],
+  allowedHeaders: ['Content-Type', 'Authorization']
 }));
 
-// Parse JSON bodies
-app.use(express.json());
+// Apply security middleware after CORS
+app.use(securityMiddleware);
 
 // CSRF protection for non-API routes
 app.use(csrfProtection);

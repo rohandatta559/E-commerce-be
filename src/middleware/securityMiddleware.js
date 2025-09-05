@@ -128,9 +128,6 @@ export const securityMiddleware = [
   // Set security headers
   ...securityHeaders,
   
-  // Body parser, reading data from body into req.body
-  express.json({ limit: '10kb' }),
-  
   // Data sanitization against NoSQL query injection
   ...sanitizeData
 ];
@@ -146,12 +143,22 @@ export const csrfProtection = (req, res, next) => {
     return next();
   }
   
-  const csrfToken = req.headers['x-csrf-token'];
+  // Get CSRF token from header, body, or query
+  const csrfToken = req.headers['x-csrf-token'] || req.body._csrf || req.query._csrf;
   
-  if (!csrfToken || csrfToken !== req.session.csrfToken) {
+  // Verify the token exists and matches the session
+  if (!csrfToken || !req.session || csrfToken !== req.session.csrfToken) {
+    console.error('CSRF token validation failed:', {
+      providedToken: csrfToken,
+      sessionToken: req.session?.csrfToken,
+      url: req.originalUrl,
+      method: req.method
+    });
+    
     return res.status(403).json({
       success: false,
-      message: 'Invalid CSRF token'
+      message: 'Invalid CSRF token',
+      error: 'CSRF token validation failed'
     });
   }
   

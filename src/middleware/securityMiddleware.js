@@ -122,8 +122,8 @@ export const validationRules = {
 };
 
 export const securityMiddleware = [
-  // Apply rate limiting to all requests
-  limiter,
+  // Apply rate limiting only in production
+  ...(process.env.NODE_ENV === 'production' ? [limiter] : []),
   
   // Set security headers
   ...securityHeaders,

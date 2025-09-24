@@ -10,6 +10,16 @@ const generateToken = (id) => {
   });
 };
 
+const setAuthCookie = (res, token) => {
+  const isProd = process.env.NODE_ENV === 'production';
+  res.cookie('token', token, {
+    httpOnly: true,
+    secure: isProd,
+    sameSite: isProd ? 'none' : 'lax',
+    maxAge: 30 * 24 * 60 * 60 * 1000 
+  });
+};
+
 export const signup = async (req, res) => {
   try {
     const { fullName, email, password, phoneNumber } = req.body;
@@ -39,16 +49,19 @@ export const signup = async (req, res) => {
     });
 
     if (user) {
+      const token = generateToken(user._id);
+      setAuthCookie(res, token);
       res.status(201).json({
         _id: user._id,
         fullName: user.fullName,
         email: user.email,
         phoneNumber: user.phoneNumber,
-        token: generateToken(user._id),
+        token,
       });
     }
   } catch (error) {
     console.log("Error creating user");
+    console.error(error);
     res.status(500).json({ message: error.message });
   }
 };
@@ -80,13 +93,15 @@ export const login = async (req, res) => {
       return res.status(401).json({ success: false, message: 'Invalid email or password' });
     }
 
+    const token = generateToken(user._id);
+    setAuthCookie(res, token);
     res.status(200).json({
       success: true,
       _id: user._id,
       fullName: user.fullName,
       email: user.email,
       phoneNumber: user.phoneNumber,
-      token: generateToken(user._id),
+      token,
     });
     
   } catch (error) {
@@ -112,5 +127,18 @@ export const getProfile = async (req, res) => {
   } catch (error) {
     console.log("Error fetching user profile");
     res.status(500).json({ message: error.message });
+  }
+};
+
+export const logout = async (req, res) => {
+  try {
+    res.clearCookie('token', {
+      httpOnly: true,
+      secure: process.env.NODE_ENV === 'production',
+      sameSite: process.env.NODE_ENV === 'production' ? 'none' : 'lax'
+    });
+    res.status(200).json({ success: true, message: 'Logged out successfully' });
+  } catch (error) {
+    res.status(500).json({ success: false, message: 'Error during logout' });
   }
 };

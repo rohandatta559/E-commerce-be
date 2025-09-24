@@ -19,9 +19,23 @@ export const protect = async (req, res, next) => {
       req.user = await User.findById(decoded.id).select('-password');
 
       next();
+      return;
     } catch (error) {
       console.error(error);
-      res.status(401).json({ message: 'Not authorized, token failed' });
+      return res.status(401).json({ message: 'Not authorized, token failed' });
+    }
+  }
+
+  // Fallback: Check HttpOnly cookie
+  if (!token && req.cookies && req.cookies.token) {
+    try {
+      token = req.cookies.token;
+      const decoded = jwt.verify(token, process.env.JWT_SECRET);
+      req.user = await User.findById(decoded.id).select('-password');
+      return next();
+    } catch (error) {
+      console.error('Cookie token verification failed:', error);
+      return res.status(401).json({ message: 'Not authorized, token failed' });
     }
   }
 

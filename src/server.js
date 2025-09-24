@@ -4,6 +4,7 @@ import dotenv from 'dotenv';
 import cors from 'cors';
 import connectDB from './config/db.js';
 import { securityMiddleware, csrfProtection } from './middleware/securityMiddleware.js';
+import cookieParser from 'cookie-parser';
 
 // Import routes
 import productRoutes from './routes/ProductRoutes.js';
@@ -21,6 +22,11 @@ const app = express();
 
 // Parse JSON bodies first
 app.use(express.json());
+// Parse cookies
+app.use(cookieParser());
+
+// If behind a proxy (e.g., hosting or local reverse proxy), trust proxy for correct IP
+app.set('trust proxy', 1);
 
 // Enable CORS before security middleware
 const allowedOrigins = [
@@ -58,6 +64,7 @@ app.use('/api/search', searchRoutes);
 
 // Health check endpoint
 app.get('/health', (req, res) => {
+  console.log('Health check request received');
   res.status(200).json({
     status: 'success',
     message: 'Server is running',

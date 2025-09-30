@@ -11,6 +11,7 @@ import productRoutes from './routes/ProductRoutes.js';
 import authRoutes from './routes/authRoutes.js';
 import adminRoutes from './routes/adminRoutes.js';
 import searchRoutes from './routes/searchRoutes.js';
+import orderRoutes from './routes/orderRoutes.js';
 
 // Load environment variables
 dotenv.config();
@@ -31,7 +32,6 @@ app.set('trust proxy', 1);
 // Enable CORS before security middleware
 const allowedOrigins = [
   process.env.FRONTEND_URL,
-  'http://localhost:3000',
   'http://localhost:3001'
 ].filter(Boolean);
 
@@ -61,6 +61,7 @@ app.use('/api/products', productRoutes);
 app.use('/api/auth', authRoutes);
 app.use('/api/admin', adminRoutes);
 app.use('/api/search', searchRoutes);
+app.use('/api/orders', orderRoutes);
 
 // Health check endpoint
 app.get('/health', (req, res) => {

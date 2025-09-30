@@ -135,8 +135,9 @@ export const securityMiddleware = [
 // CSRF protection
 export const csrfProtection = (req, res, next) => {
   // Skip CSRF for API routes or specific paths
-  if (req.path.startsWith('/api/') || 
-      req.path === '/health' || 
+  const url = req.originalUrl || req.url || '';
+  if (url.startsWith('/api/') || 
+      url === '/health' || 
       req.method === 'GET' || 
       req.method === 'HEAD' || 
       req.method === 'OPTIONS') {

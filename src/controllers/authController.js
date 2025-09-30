@@ -58,6 +58,10 @@ export const signup = async (req, res) => {
         phoneNumber: user.phoneNumber,
         token,
       });
+    console.log('User created successfully:', {
+      body: req.body,
+      timestamp: new Date().toISOString(),
+    });
     }
   } catch (error) {
     console.log("Error creating user");
@@ -70,9 +74,7 @@ export const login = async (req, res) => {
   try {
     console.log('Login request received:', {
       body: req.body,
-      headers: req.headers,
-      method: req.method,
-      url: req.originalUrl
+      timestamp: new Date().toISOString(),
     });
     
     const { email, password } = req.body;
@@ -118,14 +120,20 @@ export const getProfile = async (req, res) => {
   try {
     const user = await User.findById(req.user._id).select('-password');
     if (user) {
-      console.log("User profile fetched successfully");
+      console.log("User profile fetched successfully", {
+        timestamp: new Date().toISOString(),
+      });
       res.json(user);
     } else {
-      console.log("User not found");
+      console.log("User not found", {
+        timestamp: new Date().toISOString(),
+      });
       res.status(404).json({ message: "User not found" });
     }
   } catch (error) {
-    console.log("Error fetching user profile");
+    console.log("Error fetching user profile", {
+      timestamp: new Date().toISOString(),
+    });
     res.status(500).json({ message: error.message });
   }
 };

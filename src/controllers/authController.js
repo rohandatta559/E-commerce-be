@@ -31,7 +31,6 @@ export const signup = async (req, res) => {
         { phoneNumber }
       ]
     });
-
     if (existingUser) {
       if (existingUser.email === email) {
         return res.status(400).json({ message: 'Email is already registered' });
@@ -58,9 +57,14 @@ export const signup = async (req, res) => {
         phoneNumber: user.phoneNumber,
         token,
       });
-    console.log('User created successfully:', {
-      body: req.body,
+    console.log('✅ New User Signup:', {
+      userId: user._id,
+      name: user.fullName,
+      email: user.email,
+      phone: user.phoneNumber,
       timestamp: new Date().toISOString(),
+      userAgent: req.headers['user-agent'] || 'Unknown',
+      ip: req.ip || req.connection.remoteAddress
     });
     }
   } catch (error) {
@@ -72,10 +76,7 @@ export const signup = async (req, res) => {
 
 export const login = async (req, res) => {
   try {
-    console.log('Login request received:', {
-      body: req.body,
-      timestamp: new Date().toISOString(),
-    });
+
     
     const { email, password } = req.body;
     
@@ -94,8 +95,15 @@ export const login = async (req, res) => {
     if (!isMatch) {
       return res.status(401).json({ success: false, message: 'Invalid email or password' });
     }
-
     const token = generateToken(user._id);
+    console.log('🔑 User Login:', {
+      userId: user._id,
+      email: user.email,
+      name: user.fullName,
+      timestamp: new Date().toISOString(),
+      userAgent: req.headers['user-agent'] || 'Unknown',
+      ip: req.ip || req.connection.remoteAddress
+    });
     setAuthCookie(res, token);
     res.status(200).json({
       success: true,
@@ -120,19 +128,37 @@ export const getProfile = async (req, res) => {
   try {
     const user = await User.findById(req.user._id).select('-password');
     if (user) {
-      console.log("User profile fetched successfully", {
+      console.log("✅ User profile fetched successfully", {
         timestamp: new Date().toISOString(),
+        userId: user._id,
+        name: user.fullName,
+        email: user.email,
+        phone: user.phoneNumber,
+        userAgent: req.headers['user-agent'] || 'Unknown',
+        ip: req.ip || req.connection.remoteAddress
       });
       res.json(user);
     } else {
-      console.log("User not found", {
+      console.log("❌ User not found", {
         timestamp: new Date().toISOString(),
+        userId: req.user._id,
+        name: req.user.fullName,
+        email: req.user.email,
+        phone: req.user.phoneNumber,
+        userAgent: req.headers['user-agent'] || 'Unknown',
+        ip: req.ip || req.connection.remoteAddress
       });
       res.status(404).json({ message: "User not found" });
     }
   } catch (error) {
-    console.log("Error fetching user profile", {
+    console.log("❌ Error fetching user profile", {
       timestamp: new Date().toISOString(),
+      userId: req.user._id,
+      name: req.user.fullName,
+      email: req.user.email,
+      phone: req.user.phoneNumber,
+      userAgent: req.headers['user-agent'] || 'Unknown',
+      ip: req.ip || req.connection.remoteAddress
     });
     res.status(500).json({ message: error.message });
   }

@@ -93,32 +93,48 @@ export const markOrderPaid = async (req, res) => {
     // Generate invoice
     const pdfBuffer = await generateInvoicePDF(order);
 
-    // Email invoice
-    try {
-      await sendEmailWithAttachment({
-        to: order.user.email,
-        subject: `Your Invoice for Order ${order._id}`,
-        text: 'Please find attached your invoice.',
-        html: `<p>Hi ${order.user.fullName || ''},</p><p>Thanks for your purchase. Your invoice is attached.</p>`,
-        attachments: [
-          {
-            filename: `invoice-${order._id}.pdf`,
-            content: pdfBuffer,
-            contentType: 'application/pdf'
-          }
-        ]
-      });
-    } catch (emailErr) {
-      // Log but don't fail the request
-      console.error('Failed to send invoice email:', emailErr.message);
+    // Email invoice (only if email is enabled and configured)
+    const emailEnabled = process.env.ENABLE_EMAIL_INVOICES !== 'false';
+    let emailSent = false;
+
+    if (emailEnabled) {
+      try {
+        await sendEmailWithAttachment({
+          to: order.user.email,
+          subject: `Your Invoice for Order ${order._id}`,
+          text: 'Please find attached your invoice.',
+          html: `<p>Hi ${order.user.fullName || ''},</p><p>Thanks for your purchase. Your invoice is attached.</p>`,
+          attachments: [
+            {
+              filename: `invoice-${order._id}.pdf`,
+              content: pdfBuffer,
+              contentType: 'application/pdf'
+            }
+          ]
+        });
+        emailSent = true;
+      } catch (emailErr) {
+        // Log but don't fail the request - email issues shouldn't break order processing
+        console.error('Failed to send invoice email:', emailErr.message);
+        console.error('Email error details:', emailErr);
+      }
+    } else {
+      console.log('Email invoices disabled - skipping email send');
     }
 
-    res.json({ success: true, message: 'Order marked as paid and invoice sent', order });
+    res.json({
+      success: true,
+      message: 'Order marked as paid' + (emailSent ? ' and invoice sent' : emailEnabled ? ' but email failed' : ' (email disabled)'),
+      order,
+      emailSent
+    });
   } catch (error) {
     console.error('markOrderPaid error:', error);
     res.status(500).json({ message: 'Error marking order as paid' });
   }
 };
+
+
 
 export const getAllOrders = async (req, res) => {
   try {
@@ -136,29 +152,41 @@ export const getAllOrders = async (req, res) => {
 
 // Download invoice as PDF
 export const getOrderInvoice = async (req, res) => {
-  try {
-    const { orderId } = req.params;
-
-    const order = await Order.findById(orderId)
-      .populate('user', 'email fullName')
-      .populate('items.product', 'name');
-
-    if (!order) {
-      return res.status(404).json({ message: 'Order not found' });
+    try {
+      const { orderId } = req.params;
+      console.log('Fetching invoice for order:', orderId);
+  
+      const order = await Order.findById(orderId)
+        .populate('user', 'email fullName')
+        .populate('items.product', 'name');
+  
+      if (!order) {
+        console.log('Order not found');
+        return res.status(404).json({ message: 'Order not found' });
+      }
+  
+      console.log('Order found, checking permissions...');
+  
+      // Check permissions
+      if (String(order.user._id) !== String(req.user._id) && req.user.role !== 'admin') {
+        console.log('Permission denied for user:', req.user._id);
+        return res.status(403).json({ message: 'Not authorized to view this invoice' });
+      }
+  
+          console.log('Generating PDF invoice...');
+      
+      // Use the imported generateInvoicePDF function
+      const pdfBuffer = await generateInvoicePDF(order);
+      
+      console.log('PDF generated, sending response...');
+      res.setHeader('Content-Type', 'application/pdf');
+      res.setHeader('Content-Disposition', `attachment; filename=invoice-${order._id}.pdf`);
+      return res.send(pdfBuffer);
+    } catch (error) {
+      console.error('getOrderInvoice error:', error);
+      res.status(500).json({ 
+        message: 'Error generating invoice',
+        error: error.message 
+      });
     }
-
-    // Ensure the requester is the owner or admin
-    if (String(order.user._id) !== String(req.user._id) && req.user.role !== 'admin') {
-      return res.status(403).json({ message: 'Not authorized to view this invoice' });
-    }
-
-    const pdfBuffer = await generateInvoicePDF(order);
-
-    res.setHeader('Content-Type', 'application/pdf');
-    res.setHeader('Content-Disposition', `attachment; filename=invoice-${order._id}.pdf`);
-    return res.send(pdfBuffer);
-  } catch (error) {
-    console.error('getOrderInvoice error:', error);
-    res.status(500).json({ message: 'Error generating invoice' });
-  }
-};
+  };

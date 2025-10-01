@@ -1,17 +1,40 @@
 import express from 'express';
 import { protect } from '../middleware/authMiddleware.js';
-import { createOrder, markOrderPaid, getOrderInvoice, getAllOrders} from '../controllers/orderController.js';
+import { 
+  createOrder, 
+  getOrderById, 
+  updateOrderToPaid, 
+  getMyOrders,
+  markOrderPaid,
+  getOrderInvoice,
+  getAllOrders
+} from '../controllers/orderController.js';
 
 const router = express.Router();
 
-// Create a new order
-router.post('/', protect, createOrder);
+// Public routes (if any)
 
-router.get('/all', protect, getAllOrders);
-// Mark order as paid (user or admin)
-router.post('/:orderId/pay', protect, markOrderPaid);
+// Protected routes
+router.use(protect);
 
-// Download invoice PDF (user or admin)
-router.get('/:orderId/invoice', protect, getOrderInvoice);
+// Create a new order & get logged in user orders
+router.route('/')
+  .post(createOrder)
+  .get(getMyOrders);
+
+// Admin routes
+router.get('/all', getAllOrders);
+
+// Get order by ID
+router.get('/:id', getOrderById);
+
+// Update order to paid
+router.put('/:id/pay', updateOrderToPaid);
+
+// Mark order as paid (admin)
+router.post('/:orderId/pay', markOrderPaid);
+
+// Download invoice
+router.get('/:orderId/invoice', getOrderInvoice);
 
 export default router;

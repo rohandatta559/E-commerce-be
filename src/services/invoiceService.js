@@ -20,27 +20,27 @@ export const generateInvoicePDF = async (order) => {
       // Seller details (customize)
       doc
         .fontSize(12)
-        .text('E-commerce', { align: 'left' })
-        .text('support@commerce.example')
-        .text('https://commerce.example')
+        .text('Shoply', { align: 'left', bold: true,textIndent: 10 })
+        .text('support@shoply.com', { align: 'left', bold: true,textIndent: 10 })
+        .text('https://shoply.com', { align: 'left', bold: true,textIndent: 10 })
         .moveDown();
 
       // Invoice meta
       doc
         .fontSize(12)
-        .text(`Invoice No: ${order._id}`)
-        .text(`Date: ${new Date(order.paidAt || order.createdAt).toLocaleString()}`)
-        .text(`Payment Method: ${order.paymentMethod}`)
+        .text(`Invoice No: ${order._id.toString().substring(0, 8)}`, { align: 'left', bold: true,textIndent: 10 })
+        .text(`Date: ${new Date(order.paidAt || order.createdAt).toLocaleString()}`, { align: 'left', bold: true,textIndent: 10 })
+        .text(`Payment Method: ${order.paymentMethod}`, { align: 'left', bold: true,textIndent: 10 })
         .moveDown();
 
       // Bill to
       doc
         .fontSize(14)
-        .text('Bill To')
+        .text('Bill To', { align: 'left', bold: true,textIndent: 10 })
         .fontSize(12)
-        .text(`${order.user?.fullName || order.user?.email || 'Customer'}`)
-        .text(`${order.user?.email}`)
-        .text(`${order.user?.phoneNumber}`)
+        .text(`${order.user?.fullName || order.user?.email || 'Customer'}`, { align: 'left', bold: true,textIndent: 10 })
+        .text(`${order.user?.email}`, { align: 'left', bold: true,textIndent: 10 })
+        .text(`${order.user?.phoneNumber}`, { align: 'left', bold: true,textIndent: 10 })
         .text(order.shippingAddress?.address)
         .text(`${order.shippingAddress?.city}, ${order.shippingAddress?.postalCode}`)
         .text(order.shippingAddress?.country)
@@ -49,7 +49,7 @@ export const generateInvoicePDF = async (order) => {
       // Items table header
       doc
         .fontSize(12)
-        .text('Item', 50, doc.y, { continued: true })
+        .text('Item', 50, doc.y, { continued: true, align: 'left', bold: true,textIndent: 10 })
         .text('Qty', 300, doc.y, { width: 50, align: 'right', continued: true })
         .text('Price', 370, doc.y, { width: 80, align: 'right', continued: true })
         .text('Total', 460, doc.y, { width: 100, align: 'right' });
@@ -64,7 +64,7 @@ export const generateInvoicePDF = async (order) => {
         const total = qty * price;
         doc
           .fontSize(12)
-          .text(name, 50, doc.y + 10, { continued: true })
+          .text(name, 50, doc.y + 10, { continued: true, align: 'left', bold: true,textIndent: 10 })
           .text(String(qty), 300, doc.y, { width: 50, align: 'right', continued: true })
           .text(price.toFixed(2), 370, doc.y, { width: 80, align: 'right', continued: true })
           .text(total.toFixed(2), 460, doc.y, { width: 100, align: 'right' });
@@ -76,20 +76,20 @@ export const generateInvoicePDF = async (order) => {
       const yStart = doc.y + 10;
       doc
         .fontSize(12)
-        .text('Items Subtotal:', 370, yStart, { width: 150, align: 'right', continued: true })
+        .text('Items Subtotal:', 370, yStart, { width: 150, align: 'right', continued: true, align: 'left', bold: true,textIndent: 10 })
         .text(order.itemsPrice.toFixed(2), 520, yStart, { width: 80, align: 'right' });
 
       doc
-        .text('Tax:', 370, doc.y + 5, { width: 150, align: 'right', continued: true })
+        .text('Tax:', 370, doc.y + 5, { width: 150, align: 'right', continued: true, align: 'left', bold: true,textIndent: 10 })
         .text(order.taxPrice.toFixed(2), 520, doc.y, { width: 80, align: 'right' });
 
       doc
-        .text('Shipping:', 370, doc.y + 5, { width: 150, align: 'right', continued: true })
+        .text('Shipping:', 370, doc.y + 5, { width: 150, align: 'right', continued: true, align: 'left', bold: true,textIndent: 10 })
         .text(order.shippingPrice.toFixed(2), 520, doc.y, { width: 80, align: 'right' });
 
       doc
         .font('Helvetica-Bold')
-        .text('Total:', 370, doc.y + 8, { width: 150, align: 'right', continued: true })
+        .text('Total:', 370, doc.y + 8, { width: 150, align: 'right', continued: true, align: 'left', bold: true,textIndent: 10 })
         .text(order.totalPrice.toFixed(2), 520, doc.y, { width: 80, align: 'right' })
         .font('Helvetica');
 

@@ -2,8 +2,12 @@ import Order from '../models/Order.js';
 import User from '../models/User.js';
 import { generateInvoicePDF } from '../services/invoiceService.js';
 import { sendEmailWithAttachment } from '../services/emailService.js';
+import { publishToQueue } from '../services/queue/messageService.js';
 
 // Create a new order for the authenticated user
+// @desc    Create new order
+// @route   POST /api/orders
+// @access  Private
 export const createOrder = async (req, res) => {
   try {
     const {
@@ -59,6 +63,82 @@ export const createOrder = async (req, res) => {
 };
 
 // Mark order as paid and email invoice
+// @desc    Get logged in user orders
+// @route   GET /api/orders
+// @access  Private
+export const getMyOrders = async (req, res) => {
+  try {
+    const orders = await Order.find({ user: req.user._id });
+    res.json(orders);
+  } catch (error) {
+    console.error('Error getting user orders:', error);
+    res.status(500).json({ message: 'Server error' });
+  }
+};
+
+// @desc    Get order by ID
+// @route   GET /api/orders/:id
+// @access  Private
+export const getOrderById = async (req, res) => {
+  try {
+    const order = await Order.findById(req.params.id).populate('user', 'name email');
+    
+    if (!order) {
+      return res.status(404).json({ message: 'Order not found' });
+    }
+    
+    // Check if the order belongs to the user or if user is admin
+    if (order.user._id.toString() !== req.user._id.toString() && !req.user.isAdmin) {
+      return res.status(401).json({ message: 'Not authorized to view this order' });
+    }
+    
+    res.json(order);
+  } catch (error) {
+    console.error('Error getting order by ID:', error);
+    res.status(500).json({ message: 'Server error' });
+  }
+};
+
+// @desc    Update order to paid
+// @route   PUT /api/orders/:id/pay
+// @access  Private
+export const updateOrderToPaid = async (req, res) => {
+  try {
+    const order = await Order.findById(req.params.id);
+    
+    if (!order) {
+      return res.status(404).json({ message: 'Order not found' });
+    }
+    
+    // Check if the order belongs to the user
+    if (order.user.toString() !== req.user._id.toString()) {
+      return res.status(401).json({ message: 'Not authorized to update this order' });
+    }
+    
+    order.isPaid = true;
+    order.paidAt = Date.now();
+    order.paymentResult = {
+      id: req.body.id,
+      status: req.body.status,
+      update_time: req.body.update_time,
+      email_address: req.body.payer.email_address
+    };
+    
+    const updatedOrder = await order.save();
+    
+    // Publish to order processing queue
+    await publishToQueue('order_processing', updatedOrder);
+    
+    res.json(updatedOrder);
+  } catch (error) {
+    console.error('Error updating order to paid:', error);
+    res.status(500).json({ message: 'Server error' });
+  }
+};
+
+// @desc    Mark order as paid (admin)
+// @route   POST /api/orders/:orderId/pay
+// @access  Private/Admin
 export const markOrderPaid = async (req, res) => {
   try {
     const { orderId } = req.params;

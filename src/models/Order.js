@@ -6,6 +6,10 @@ const orderSchema = new mongoose.Schema({
     ref: 'User',
     required: true
   },
+   phoneNumber: {
+      type: String,
+      required: true
+    }, 
   items: [{
     product: {
       type: mongoose.Schema.Types.ObjectId,
@@ -36,7 +40,8 @@ const orderSchema = new mongoose.Schema({
     id: { type: String },
     status: { type: String },
     update_time: { type: String },
-    email_address: { type: String }
+    email_address: { type: String },
+    phoneNumber: { type: String }
   },
   itemsPrice: {
     type: Number,

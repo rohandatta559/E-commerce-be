@@ -62,7 +62,7 @@ export const createOrder = async (req, res) => {
 export const markOrderPaid = async (req, res) => {
   try {
     const { orderId } = req.params;
-    const { paymentResult } = req.body; // { id, status, update_time, email_address }
+    const { paymentResult } = req.body; // { id, status, update_time, email_address , phoneNumber }
 
     let order = await Order.findById(orderId)
       .populate('user', 'email fullName')
@@ -84,7 +84,8 @@ export const markOrderPaid = async (req, res) => {
         id: paymentResult.id,
         status: paymentResult.status,
         update_time: paymentResult.update_time,
-        email_address: paymentResult.email_address
+        email_address: paymentResult.email_address,
+        phoneNumber: paymentResult.phoneNumber
       };
     }
 
@@ -157,7 +158,7 @@ export const getOrderInvoice = async (req, res) => {
       console.log('Fetching invoice for order:', orderId);
   
       const order = await Order.findById(orderId)
-        .populate('user', 'email fullName')
+        .populate('user', 'email fullName phoneNumber')
         .populate('items.product', 'name');
   
       if (!order) {

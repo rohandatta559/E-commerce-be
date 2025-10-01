@@ -31,33 +31,45 @@ export const signup = async (req, res) => {
         { phoneNumber }
       ]
     });
+    
     if (existingUser) {
       if (existingUser.email === email) {
-        return res.status(400).json({ message: 'Email is already registered' });
+        return res.status(400).json({ 
+          success: false,
+          message: 'Email is already registered' 
+        });
       }
       if (existingUser.phoneNumber === phoneNumber) {
-        return res.status(400).json({ message: 'Phone number is already registered' });
+        return res.status(400).json({ 
+          success: false,
+          message: 'Phone number is already registered' 
+        });
       }
     }
 
+    // Create user with phone verification required
     const user = await User.create({
       email,
       password,
       phoneNumber,
-      fullName
+      fullName,
+      isPhoneVerified: false // Will be set to true after verification
     });
 
-    if (user) {
-      const token = generateToken(user._id);
-      setAuthCookie(res, token);
-      res.status(201).json({
-        _id: user._id,
-        fullName: user.fullName,
-        email: user.email,
-        phoneNumber: user.phoneNumber,
-        token,
-      });
-    console.log('✅ New User Signup:', {
+    // Send verification OTP
+    try {
+      const { sendOTP } = await import('../services/smsService.js');
+      await sendOTP(phoneNumber);
+    } catch (error) {
+      console.error('Failed to send verification OTP:', error);
+      // Don't fail the signup if OTP sending fails
+    }
+    
+    // Generate token (but don't set cookie yet - require verification first)
+    const token = generateToken(user._id);
+    
+    // Log successful signup
+    console.log('✅ New User Signup (Pending Verification):', {
       userId: user._id,
       name: user.fullName,
       email: user.email,
@@ -66,54 +78,108 @@ export const signup = async (req, res) => {
       userAgent: req.headers['user-agent'] || 'Unknown',
       ip: req.ip || req.connection.remoteAddress
     });
-    }
+
+    return res.status(201).json({
+      success: true,
+      message: 'Registration successful. Please verify your phone number.',
+      requiresVerification: true,
+      _id: user._id,
+      fullName: user.fullName,
+      email: user.email,
+      phoneNumber: user.phoneNumber,
+      isPhoneVerified: false,
+      token // Send token but frontend should require verification
+    });
   } catch (error) {
-    console.log("Error creating user");
-    console.error(error);
-    res.status(500).json({ message: error.message });
+    console.error('Signup error:', error);
+    res.status(500).json({ 
+      success: false,
+      message: 'Server error during signup',
+      error: process.env.NODE_ENV === 'development' ? error.message : undefined
+    });
   }
 };
 
 export const login = async (req, res) => {
   try {
-
-    
     const { email, password } = req.body;
     
     if (!email || !password) {
-      return res.status(400).json({ success: false, message: 'Please provide email and password' });
+      return res.status(400).json({ 
+        success: false, 
+        message: 'Please provide email and password' 
+      });
     }
 
     const user = await User.findOne({ email }).select('+password');
     
     if (!user) {
-      return res.status(401).json({ success: false, message: 'Invalid email or password' });
+      return res.status(401).json({ 
+        success: false, 
+        message: 'Invalid email or password' 
+      });
     }
 
     const isMatch = await user.matchPassword(password);
     
     if (!isMatch) {
-      return res.status(401).json({ success: false, message: 'Invalid email or password' });
+      return res.status(401).json({ 
+        success: false, 
+        message: 'Invalid email or password' 
+      });
     }
+
+    // Generate token (don't set it in cookie yet, as we need phone verification)
     const token = generateToken(user._id);
+      
+    // Log successful login
     console.log('🔑 User Login:', {
       userId: user._id,
-      email: user.email,
       name: user.fullName,
+      email: user.email,
+      phone: user.phoneNumber,
+      isPhoneVerified: user.isPhoneVerified,
       timestamp: new Date().toISOString(),
       userAgent: req.headers['user-agent'] || 'Unknown',
       ip: req.ip || req.connection.remoteAddress
     });
+
+    // Check if phone is verified
+    if (!user.isPhoneVerified) {
+      // Send verification OTP if not verified
+      try {
+        const { sendOTP } = await import('../services/smsService.js');
+        await sendOTP(user.phoneNumber);
+      } catch (error) {
+        console.error('Failed to send verification OTP:', error);
+      }
+      
+      return res.status(200).json({
+        success: true,
+        requiresVerification: true,
+        message: 'Please verify your phone number',
+        _id: user._id,
+        fullName: user.fullName,
+        email: user.email,
+        phoneNumber: user.phoneNumber,
+        isPhoneVerified: false,
+        token
+      });
+    }
+
+    // If phone is verified, set auth cookie and return user data
     setAuthCookie(res, token);
+    
     res.status(200).json({
       success: true,
       _id: user._id,
       fullName: user.fullName,
       email: user.email,
       phoneNumber: user.phoneNumber,
-      token,
+      role: user.role,
+      isPhoneVerified: true,
+      token
     });
-    
   } catch (error) {
     console.error('Login error:', error);
     res.status(500).json({ 
@@ -128,7 +194,7 @@ export const getProfile = async (req, res) => {
   try {
     const user = await User.findById(req.user._id).select('-password');
     if (user) {
-      console.log("✅ User profile fetched successfully", {
+      console.log('✅ User profile fetched successfully', {
         timestamp: new Date().toISOString(),
         userId: user._id,
         name: user.fullName,
@@ -137,30 +203,28 @@ export const getProfile = async (req, res) => {
         userAgent: req.headers['user-agent'] || 'Unknown',
         ip: req.ip || req.connection.remoteAddress
       });
-      res.json(user);
+      return res.json(user);
     } else {
-      console.log("❌ User not found", {
+      console.log('❌ User not found', {
         timestamp: new Date().toISOString(),
         userId: req.user._id,
-        name: req.user.fullName,
-        email: req.user.email,
-        phone: req.user.phoneNumber,
         userAgent: req.headers['user-agent'] || 'Unknown',
         ip: req.ip || req.connection.remoteAddress
       });
-      res.status(404).json({ message: "User not found" });
+      return res.status(404).json({ message: 'User not found' });
     }
   } catch (error) {
-    console.log("❌ Error fetching user profile", {
+    console.error('❌ Error fetching user profile', {
       timestamp: new Date().toISOString(),
-      userId: req.user._id,
-      name: req.user.fullName,
-      email: req.user.email,
-      phone: req.user.phoneNumber,
+      userId: req.user?._id,
+      error: error.message,
       userAgent: req.headers['user-agent'] || 'Unknown',
       ip: req.ip || req.connection.remoteAddress
     });
-    res.status(500).json({ message: error.message });
+    return res.status(500).json({ 
+      message: 'Error fetching profile',
+      error: process.env.NODE_ENV === 'development' ? error.message : undefined
+    });
   }
 };
 
@@ -171,8 +235,16 @@ export const logout = async (req, res) => {
       secure: process.env.NODE_ENV === 'production',
       sameSite: process.env.NODE_ENV === 'production' ? 'none' : 'lax'
     });
-    res.status(200).json({ success: true, message: 'Logged out successfully' });
+    res.status(200).json({ 
+      success: true, 
+      message: 'Logged out successfully' 
+    });
   } catch (error) {
-    res.status(500).json({ success: false, message: 'Error during logout' });
+    console.error('Logout error:', error);
+    res.status(500).json({ 
+      success: false, 
+      message: 'Server error during logout',
+      error: process.env.NODE_ENV === 'development' ? error.message : undefined
+    });
   }
 };

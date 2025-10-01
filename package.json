@@ -18,12 +18,15 @@
     "express-mongo-sanitize": "^2.2.0",
     "express-rate-limit": "^8.1.0",
     "express-validator": "^7.2.1",
+    "fast2sms": "^1.0.3",
     "helmet": "^8.1.0",
     "hpp": "^0.2.3",
     "jsonwebtoken": "^9.0.2",
     "mongoose": "^8.18.0",
     "nodemailer": "^7.0.6",
     "pdfkit": "^0.17.2",
+    "uniqid": "^5.4.0",
+    "uuid": "^13.0.0",
     "xss-clean": "^0.1.4"
   },
   "devDependencies": {

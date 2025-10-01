@@ -39,6 +39,8 @@ export const generateInvoicePDF = async (order) => {
         .text('Bill To')
         .fontSize(12)
         .text(`${order.user?.fullName || order.user?.email || 'Customer'}`)
+        .text(`${order.user?.email}`)
+        .text(`${order.user?.phoneNumber}`)
         .text(order.shippingAddress?.address)
         .text(`${order.shippingAddress?.city}, ${order.shippingAddress?.postalCode}`)
         .text(order.shippingAddress?.country)

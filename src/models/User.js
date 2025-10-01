@@ -21,8 +21,14 @@ const userSchema = new mongoose.Schema(
       required: [true, 'Phone number is required'],
       unique: true,
       trim: true,
-      match: [/^\+?[1-9]\d{9,14}$/, 'Please enter a valid phone number']
+      match: [/^\+?[1-9]\d{9,14}$/, 'Please enter a valid phone number with country code']
     },
+    isPhoneVerified: {
+      type: Boolean,
+      default: false
+    },
+    phoneVerificationCode: String,
+    phoneVerificationExpires: Date,
     fullName: { type: String },
     role: {
       type: String,

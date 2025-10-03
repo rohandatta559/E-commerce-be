@@ -12,6 +12,7 @@ import authRoutes from './routes/authRoutes.js';
 import adminRoutes from './routes/adminRoutes.js';
 import searchRoutes from './routes/searchRoutes.js';
 import orderRoutes from './routes/orderRoutes.js';
+import wishlistRoutes from './routes/wishlistRoutes.js';
 
 // Load environment variables
 dotenv.config();
@@ -32,7 +33,11 @@ app.set('trust proxy', 1);
 // Enable CORS before security middleware
 const allowedOrigins = [
   process.env.FRONTEND_URL,
-  'http://localhost:3001'
+  'http://localhost:3001',
+  'http://localhost:3002',
+  'http://127.0.0.1:3001',
+  'http://127.0.0.1:3002',
+  'http://localhost:5000',
 ].filter(Boolean);
 
 app.use(cors({
@@ -46,32 +51,37 @@ app.use(cors({
     return callback(null, true);
   },
   credentials: true,
-  methods: ['GET', 'POST', 'PUT', 'DELETE', 'OPTIONS'],
-  allowedHeaders: ['Content-Type', 'Authorization']
+  methods: ['GET', 'POST', 'PUT', 'DELETE', 'OPTIONS', 'PATCH'],
+  allowedHeaders: ['Content-Type', 'Authorization', 'X-Requested-With'],
+  exposedHeaders: ['Content-Range', 'X-Content-Range']
 }));
 
-// Apply security middleware after CORS
+// Handle preflight requests
+app.options('*', cors());
+
+// Health check endpoint - placed before other routes
+app.get('/api/health', (req, res) => {
+  console.log('Health check request received');
+  res.status(200).json({
+    status: 'ok',
+    message: 'Server is running',
+    timestamp: new Date().toISOString()
+  });
+});
+
+// Security middleware
 app.use(securityMiddleware);
 
-// CSRF protection for non-API routes
+// CSRF protection for non-GET requests
 app.use(csrfProtection);
 
-// API Routes
+// Routes
 app.use('/api/products', productRoutes);
 app.use('/api/auth', authRoutes);
 app.use('/api/admin', adminRoutes);
 app.use('/api/search', searchRoutes);
 app.use('/api/orders', orderRoutes);
-
-// Health check endpoint
-app.get('/health', (req, res) => {
-  console.log('Health check request received');
-  res.status(200).json({
-    status: 'success',
-    message: 'Server is running',
-    timestamp: new Date().toISOString()
-  });
-});
+app.use('/api/wishlist', wishlistRoutes);
 
 // 404 handler
 app.use((req, res) => {

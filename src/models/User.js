@@ -28,6 +28,17 @@ const userSchema = new mongoose.Schema(
       default: false
     },
     phoneVerificationCode: String,
+  wishlist: [{
+    product: {
+      type: mongoose.Schema.Types.ObjectId,
+      ref: 'Product',
+      required: true
+    },
+    addedAt: {
+      type: Date,
+      default: Date.now
+    }
+  }],
     phoneVerificationExpires: Date,
     fullName: { type: String },
     role: {

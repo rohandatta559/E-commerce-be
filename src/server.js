@@ -38,6 +38,7 @@ const allowedOrigins = [
   'http://127.0.0.1:3001',
   'http://127.0.0.1:3002',
   'http://localhost:5000',
+  'https://e-commerce-be-jp32.onrender.com'
 ].filter(Boolean);
 
 app.use(cors({

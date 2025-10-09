@@ -10,23 +10,44 @@ import { publishToQueue } from '../services/queue/messageService.js';
 // @access  Private
 export const createOrder = async (req, res) => {
   try {
+    // Debug log to see the raw request body
+    console.log('Raw request body:', JSON.stringify(req.body, null, 2));
+
+    // Handle both orderItems (from frontend) and items (legacy)
+    const items = req.body.orderItems || req.body.items || [];
+    
     const {
-      items = [],
       shippingAddress,
       paymentMethod,
       taxPrice = 0,
-      shippingPrice = 0
-    } = req.body || {};
+      shippingPrice = 0,
+      phoneNumber
+    } = req.body;
+     
+    if(!phoneNumber){
+      return res.status(400).json({
+        message:'Phone Number is required',
+        field: 'phoneNumber'
+      })
+    }
+
+
+    // Debug log to see the extracted items
+    console.log('Extracted items:', items);
 
     if (!Array.isArray(items) || items.length === 0) {
-      return res.status(400).json({ message: 'Order must have at least one item' });
+      return res.status(400).json({ 
+        message: 'Order must have at least one item',
+        receivedBody: req.body // Include received body for debugging
+      });
     }
 
     if (!paymentMethod) {
       return res.status(400).json({ message: 'paymentMethod is required' });
     }
 
-    if (!shippingAddress || !shippingAddress.address || !shippingAddress.city || !shippingAddress.postalCode || !shippingAddress.country) {
+    if (!shippingAddress || !shippingAddress.address || !shippingAddress.city || 
+        !shippingAddress.postalCode || !shippingAddress.country) {
       return res.status(400).json({ message: 'Complete shippingAddress is required' });
     }
 
@@ -39,6 +60,17 @@ export const createOrder = async (req, res) => {
 
     const totalPrice = Number(itemsPrice) + Number(taxPrice || 0) + Number(shippingPrice || 0);
 
+    // Debug log before creating order
+    console.log('Creating order with:', {
+      user: req.user?._id,
+      itemsCount: items.length,
+      itemsPrice,
+      shippingPrice,
+      taxPrice,
+      totalPrice,
+      phoneNumber
+    });
+
     const order = await Order.create({
       user: req.user._id,
       items,
@@ -47,21 +79,30 @@ export const createOrder = async (req, res) => {
       itemsPrice,
       taxPrice,
       shippingPrice,
-      totalPrice
+      totalPrice,
+      phoneNumber
     });
 
+    // Populate user and product details
     const created = await order.populate([
       { path: 'user', select: 'email fullName' },
-      { path: 'items.product', select: 'name' }
+      { path: 'items.product', select: 'name image price' }
     ]);
 
-    return res.status(201).json(created);
+    // Log successful order creation
+    console.log(`Order created: ${created._id} for user ${req.user._id}`);
+
+    res.status(201).json(created);
+
   } catch (error) {
-    console.error('createOrder error:', error);
-    return res.status(500).json({ message: 'Error creating order' });
+    console.error('Error creating order:', error);
+    res.status(500).json({ 
+      message: 'Error creating order',
+      error: error.message,
+      stack: process.env.NODE_ENV === 'development' ? error.stack : undefined
+    });
   }
 };
-
 // Mark order as paid and email invoice
 // @desc    Get logged in user orders
 // @route   GET /api/orders
@@ -81,21 +122,37 @@ export const getMyOrders = async (req, res) => {
 // @access  Private
 export const getOrderById = async (req, res) => {
   try {
-    const order = await Order.findById(req.params.id).populate('user', 'name email');
-    
+    const order = await Order.findById(req.params.id)
+      .populate('user', 'name email _id'); // Make sure to include _id in the populated fields
+
     if (!order) {
       return res.status(404).json({ message: 'Order not found' });
     }
-    
+
+    // Add debug logs
+    console.log('Order user ID:', order.user?._id);
+    console.log('Request user ID:', req.user?._id);
+    console.log('Is admin:', req.user?.isAdmin);
+
     // Check if the order belongs to the user or if user is admin
-    if (order.user._id.toString() !== req.user._id.toString() && !req.user.isAdmin) {
-      return res.status(401).json({ message: 'Not authorized to view this order' });
+    if (
+      order.user?._id?.toString() !== req.user?._id?.toString() && 
+      !req.user?.isAdmin
+    ) {
+      return res.status(401).json({ 
+        message: 'Not authorized to view this order',
+        orderUserId: order.user?._id,
+        requestUserId: req.user?._id
+      });
     }
-    
+
     res.json(order);
   } catch (error) {
     console.error('Error getting order by ID:', error);
-    res.status(500).json({ message: 'Server error' });
+    res.status(500).json({ 
+      message: 'Server error',
+      error: error.message 
+    });
   }
 };
 
@@ -104,38 +161,43 @@ export const getOrderById = async (req, res) => {
 // @access  Private
 export const updateOrderToPaid = async (req, res) => {
   try {
-    const order = await Order.findById(req.params.id);
+    const orderId = req.params.id;
+    console.log('Updating order to paid. Order ID:', orderId);
+    
+    // Log the request body for debugging
+    console.log('Request body:', req.body);
+    
+    // Find the order
+    const order = await Order.findById(orderId);
+    console.log('Found order:', order ? 'Yes' : 'No');
     
     if (!order) {
+      console.log('Order not found with ID:', orderId);
       return res.status(404).json({ message: 'Order not found' });
     }
-    
-    // Check if the order belongs to the user
-    if (order.user.toString() !== req.user._id.toString()) {
-      return res.status(401).json({ message: 'Not authorized to update this order' });
-    }
-    
+
+    // Update order fields
     order.isPaid = true;
     order.paidAt = Date.now();
     order.paymentResult = {
-      id: req.body.id,
-      status: req.body.status,
-      update_time: req.body.update_time,
-      email_address: req.body.payer.email_address
+      id: req.body.id || 'test_payment_id',
+      status: req.body.status || 'completed',
+      update_time: req.body.update_time || new Date().toISOString(),
+      email_address: req.body.email_address || req.user.email
     };
-    
+
     const updatedOrder = await order.save();
-    
-    // Publish to order processing queue
-    await publishToQueue('order_processing', updatedOrder);
+    console.log('Order updated successfully:', updatedOrder._id);
     
     res.json(updatedOrder);
   } catch (error) {
     console.error('Error updating order to paid:', error);
-    res.status(500).json({ message: 'Server error' });
+    res.status(500).json({ 
+      message: 'Error updating order', 
+      error: error.message 
+    });
   }
 };
-
 // @desc    Mark order as paid (admin)
 // @route   POST /api/orders/:orderId/pay
 // @access  Private/Admin

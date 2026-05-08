@@ -17,12 +17,13 @@ export const createOrder = async (req, res) => {
     const items = req.body.orderItems || req.body.items || [];
     
     const {
-      shippingAddress,
+      shippingAddress = {},
       paymentMethod,
       taxPrice = 0,
       shippingPrice = 0,
-      phoneNumber
     } = req.body;
+
+    const phoneNumber = req.body.phoneNumber || shippingAddress.phone;
      
     if(!phoneNumber){
       return res.status(400).json({
@@ -46,8 +47,15 @@ export const createOrder = async (req, res) => {
       return res.status(400).json({ message: 'paymentMethod is required' });
     }
 
-    if (!shippingAddress || !shippingAddress.address || !shippingAddress.city || 
-        !shippingAddress.postalCode || !shippingAddress.country) {
+    const normalizedShippingAddress = {
+      address: shippingAddress.address || shippingAddress.line1,
+      city: shippingAddress.city,
+      postalCode: shippingAddress.postalCode,
+      country: shippingAddress.country || shippingAddress.state || 'India',
+    };
+
+    if (!normalizedShippingAddress.address || !normalizedShippingAddress.city ||
+        !normalizedShippingAddress.postalCode || !normalizedShippingAddress.country) {
       return res.status(400).json({ message: 'Complete shippingAddress is required' });
     }
 
@@ -74,7 +82,7 @@ export const createOrder = async (req, res) => {
     const order = await Order.create({
       user: req.user._id,
       items,
-      shippingAddress,
+      shippingAddress: normalizedShippingAddress,
       paymentMethod,
       itemsPrice,
       taxPrice,

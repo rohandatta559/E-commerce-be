@@ -17,9 +17,6 @@ import wishlistRoutes from './routes/wishlistRoutes.js';
 // Load environment variables
 dotenv.config();
 
-// Connect to database
-connectDB();
-
 const app = express();
 
 // Parse JSON bodies first
@@ -96,10 +93,10 @@ app.use((req, res) => {
 // Global error handler
 app.use((err, req, res, next) => {
   console.error('Global error handler:', err);
-  
+
   const statusCode = err.statusCode || 500;
   const message = err.message || 'Internal Server Error';
-  
+
   res.status(statusCode).json({
     success: false,
     message,
@@ -108,34 +105,56 @@ app.use((err, req, res, next) => {
 });
 
 const PORT = process.env.PORT || 8002;
-const server = app.listen(PORT, () => {
-  console.log(`Server running in ${process.env.NODE_ENV || 'development'} mode on port ${PORT}`);
-});
+let server;
+
+const startServer = async () => {
+  try {
+    await connectDB();
+    server = app.listen(PORT, () => {
+      console.log(`Server running in ${process.env.NODE_ENV || 'development'} mode on port ${PORT}`);
+    });
+  } catch (error) {
+    console.error(error.message);
+    process.exit(1);
+  }
+};
+
+startServer();
 
 // Handle unhandled promise rejections
 process.on('unhandledRejection', (err) => {
-  console.error('UNHANDLED REJECTION! 💥 Shutting down...');
+  console.error('UNHANDLED REJECTION! Shutting down...');
   console.error(err.name, err.message);
-  
-  server.close(() => {
+
+  if (server) {
+    server.close(() => {
+      process.exit(1);
+    });
+  } else {
     process.exit(1);
-  });
+  }
 });
 
 // Handle uncaught exceptions
 process.on('uncaughtException', (err) => {
-  console.error('UNCAUGHT EXCEPTION! 💥 Shutting down...');
+  console.error('UNCAUGHT EXCEPTION! Shutting down...');
   console.error(err.name, err.message);
-  
-  server.close(() => {
+
+  if (server) {
+    server.close(() => {
+      process.exit(1);
+    });
+  } else {
     process.exit(1);
-  });
+  }
 });
 
 // Handle SIGTERM
 process.on('SIGTERM', () => {
-  console.log('👋 SIGTERM RECEIVED. Shutting down gracefully');
-  server.close(() => {
-    console.log('💥 Process terminated!');
-  });
+  console.log('SIGTERM RECEIVED. Shutting down gracefully');
+  if (server) {
+    server.close(() => {
+      console.log('Process terminated!');
+    });
+  }
 });

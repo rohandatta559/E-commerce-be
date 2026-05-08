@@ -228,6 +228,63 @@ export const getProfile = async (req, res) => {
   }
 };
 
+export const updateProfile = async (req, res) => {
+  try {
+    const { fullName, email, phoneNumber } = req.body;
+    const userId = req.user._id;
+
+    const user = await User.findById(userId);
+    if (!user) {
+      return res.status(404).json({ success: false, message: 'User not found' });
+    }
+
+    if (email && email !== user.email) {
+      const existingEmailUser = await User.findOne({ email });
+      if (existingEmailUser) {
+        return res.status(400).json({ success: false, message: 'Email is already in use' });
+      }
+      user.email = email;
+    }
+
+    if (phoneNumber && phoneNumber !== user.phoneNumber) {
+      const existingPhoneUser = await User.findOne({ phoneNumber });
+      if (existingPhoneUser) {
+        return res.status(400).json({ success: false, message: 'Phone number is already in use' });
+      }
+      user.phoneNumber = phoneNumber;
+      user.isPhoneVerified = false;
+    }
+
+    if (fullName !== undefined) {
+      user.fullName = fullName;
+    }
+
+    const updatedUser = await user.save();
+
+    return res.status(200).json({
+      success: true,
+      message: 'Profile updated successfully',
+      user: {
+        _id: updatedUser._id,
+        fullName: updatedUser.fullName,
+        email: updatedUser.email,
+        phoneNumber: updatedUser.phoneNumber,
+        isPhoneVerified: updatedUser.isPhoneVerified,
+        role: updatedUser.role,
+        createdAt: updatedUser.createdAt,
+        updatedAt: updatedUser.updatedAt,
+      },
+    });
+  } catch (error) {
+    console.error('Profile update error:', error);
+    return res.status(500).json({
+      success: false,
+      message: 'Failed to update profile',
+      error: process.env.NODE_ENV === 'development' ? error.message : undefined,
+    });
+  }
+};
+
 export const logout = async (req, res) => {
   try {
     res.clearCookie('token', {

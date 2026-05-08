@@ -3,6 +3,7 @@ import {
   signup, 
   login, 
   getProfile, 
+  updateProfile,
   logout 
 } from '../controllers/authController.js';
 import { 
@@ -27,6 +28,7 @@ router.post('/resend-otp', resendVerificationOTP);
 
 // Protected routes
 router.get('/profile', protect, getProfile);
+router.put('/profile', protect, updateProfile);
 router.get('/me', protect, getProfile);
 router.get('/check-verification', protect, checkVerificationStatus);
 

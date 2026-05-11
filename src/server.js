@@ -123,7 +123,14 @@ startServer();
 
 // Handle unhandled promise rejections
 process.on('unhandledRejection', (err) => {
-  console.error('UNHANDLED REJECTION! Shutting down...');
+  console.error('UNHANDLED REJECTION!', err?.name, err?.message);
+  const isProd = process.env.NODE_ENV === 'production';
+  if (!isProd) {
+    console.warn('Continuing process in development mode to avoid crash loops.');
+    return;
+  }
+
+  console.error('Shutting down due to unhandled rejection in production...');
   console.error(err.name, err.message);
 
   if (server) {
@@ -137,7 +144,14 @@ process.on('unhandledRejection', (err) => {
 
 // Handle uncaught exceptions
 process.on('uncaughtException', (err) => {
-  console.error('UNCAUGHT EXCEPTION! Shutting down...');
+  console.error('UNCAUGHT EXCEPTION!', err?.name, err?.message);
+  const isProd = process.env.NODE_ENV === 'production';
+  if (!isProd) {
+    console.warn('Continuing process in development mode to avoid crash loops.');
+    return;
+  }
+
+  console.error('Shutting down due to uncaught exception in production...');
   console.error(err.name, err.message);
 
   if (server) {

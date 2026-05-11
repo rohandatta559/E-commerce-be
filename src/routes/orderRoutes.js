@@ -5,8 +5,10 @@ import {
   getOrderById, 
   updateOrderToPaid, 
   getMyOrders,
+  getOrderStats,
   markOrderPaid,
   getOrderInvoice,
+  sendOrderInvoiceEmail,
   getAllOrders
 } from '../controllers/orderController.js';
 
@@ -22,6 +24,9 @@ router.route('/')
   .post(createOrder)
   .get(getMyOrders);
 
+// Get order statistics
+router.get('/stats/overview', getOrderStats);
+
 // Admin routes
 router.get('/all', getAllOrders);
 
@@ -36,5 +41,8 @@ router.post('/:orderId/pay', markOrderPaid);
 
 // Download invoice
 router.get('/:orderId/invoice', getOrderInvoice);
+
+// Send invoice email
+router.post('/:orderId/send-invoice', sendOrderInvoiceEmail);
 
 export default router;

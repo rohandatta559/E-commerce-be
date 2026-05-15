@@ -1,6 +1,6 @@
 // backend/ProductRoutes.js
 import express from "express";
-import { getProducts, getProductById, createProduct, createProductsBulk, deleteProduct, updateProduct } from "../controllers/ProductController.js";
+import { getProducts, getProductById, createProduct, createProductsBulk, deleteProduct, updateProduct, addProductReview } from "../controllers/ProductController.js";
 import { protect } from "../middleware/authMiddleware.js";
 
 const router = express.Router();
@@ -11,5 +11,6 @@ router.post("/", protect, createProduct);
 router.post("/bulk", protect, createProductsBulk);
 router.delete("/", protect, deleteProduct);
 router.put("/", protect, updateProduct);
+router.post("/:id/reviews", protect, addProductReview);
 
 export default router;

@@ -305,3 +305,125 @@ export const logout = async (req, res) => {
     });
   }
 };
+
+export const changePassword = async (req, res) => {
+  try {
+    const { currentPassword, newPassword } = req.body;
+    if (!currentPassword || !newPassword) {
+      return res.status(400).json({ success: false, message: 'Current and new password are required' });
+    }
+
+    const user = await User.findById(req.user._id).select('+password');
+    if (!user) {
+      return res.status(404).json({ success: false, message: 'User not found' });
+    }
+
+    const isMatch = await user.matchPassword(currentPassword);
+    if (!isMatch) {
+      return res.status(400).json({ success: false, message: 'Current password is incorrect' });
+    }
+
+    user.password = newPassword;
+    await user.save();
+    return res.status(200).json({ success: true, message: 'Password updated successfully' });
+  } catch (error) {
+    console.error('Change password error:', error);
+    return res.status(500).json({ success: false, message: 'Failed to change password' });
+  }
+};
+
+export const getAddresses = async (req, res) => {
+  try {
+    const user = await User.findById(req.user._id).select('addresses');
+    return res.json({ success: true, addresses: user?.addresses || [] });
+  } catch (error) {
+    console.error('Get addresses error:', error);
+    return res.status(500).json({ success: false, message: 'Failed to fetch addresses' });
+  }
+};
+
+export const addAddress = async (req, res) => {
+  try {
+    const { label, fullName, phoneNumber, line1, line2, city, state, postalCode, country, isDefault } = req.body;
+    if (!fullName || !phoneNumber || !line1 || !city || !state || !postalCode) {
+      return res.status(400).json({ success: false, message: 'Missing required address fields' });
+    }
+
+    const user = await User.findById(req.user._id);
+    if (!user) return res.status(404).json({ success: false, message: 'User not found' });
+
+    if (isDefault) {
+      user.addresses = user.addresses.map((address) => ({ ...address.toObject(), isDefault: false }));
+    }
+
+    user.addresses.push({
+      label,
+      fullName,
+      phoneNumber,
+      line1,
+      line2,
+      city,
+      state,
+      postalCode,
+      country: country || 'India',
+      isDefault: Boolean(isDefault),
+    });
+
+    if (user.addresses.length === 1) {
+      user.addresses[0].isDefault = true;
+    }
+
+    await user.save();
+    return res.status(201).json({ success: true, addresses: user.addresses });
+  } catch (error) {
+    console.error('Add address error:', error);
+    return res.status(500).json({ success: false, message: 'Failed to add address' });
+  }
+};
+
+export const updateAddress = async (req, res) => {
+  try {
+    const { addressId } = req.params;
+    const user = await User.findById(req.user._id);
+    if (!user) return res.status(404).json({ success: false, message: 'User not found' });
+
+    const address = user.addresses.id(addressId);
+    if (!address) return res.status(404).json({ success: false, message: 'Address not found' });
+
+    Object.assign(address, req.body);
+    if (req.body.isDefault) {
+      user.addresses.forEach((item) => {
+        item.isDefault = item._id.toString() === addressId;
+      });
+    }
+
+    await user.save();
+    return res.json({ success: true, addresses: user.addresses });
+  } catch (error) {
+    console.error('Update address error:', error);
+    return res.status(500).json({ success: false, message: 'Failed to update address' });
+  }
+};
+
+export const deleteAddress = async (req, res) => {
+  try {
+    const { addressId } = req.params;
+    const user = await User.findById(req.user._id);
+    if (!user) return res.status(404).json({ success: false, message: 'User not found' });
+
+    const address = user.addresses.id(addressId);
+    if (!address) return res.status(404).json({ success: false, message: 'Address not found' });
+
+    const wasDefault = address.isDefault;
+    user.addresses.pull(addressId);
+    if (wasDefault && user.addresses.length > 0) {
+      user.addresses[0].isDefault = true;
+    }
+
+    await user.save();
+    return res.json({ success: true, addresses: user.addresses });
+  } catch (error) {
+    console.error('Delete address error:', error);
+    return res.status(500).json({ success: false, message: 'Failed to delete address' });
+  }
+};

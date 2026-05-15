@@ -10,19 +10,19 @@ export const getSalesAnalytics = async (req, res) => {
     
     // Total sales
     const totalSales = await Order.aggregate([
-      { $match: { status: 'completed' } },
-      { $group: { _id: null, total: { $sum: '$totalAmount' } } }
+      { $match: { status: { $in: ['paid', 'packed', 'shipped', 'delivered'] } } },
+      { $group: { _id: null, total: { $sum: '$totalPrice' } } }
     ]);
 
     // Monthly sales
     const monthlySales = await Order.aggregate([
       { 
         $match: { 
-          status: 'completed',
+          status: { $in: ['paid', 'packed', 'shipped', 'delivered'] },
           createdAt: { $gte: startOfMonth }
         } 
       },
-      { $group: { _id: null, total: { $sum: '$totalAmount' } } }
+      { $group: { _id: null, total: { $sum: '$totalPrice' } } }
     ]);
 
     // Top selling products
@@ -112,7 +112,7 @@ export const getOrders = async (req, res) => {
     }
     
     const orders = await Order.find(query)
-      .populate('user', 'firstName lastName email')
+      .populate('user', 'fullName email')
       .sort({ createdAt: -1 })
       .limit(limit * 1)
       .skip((page - 1) * limit);
@@ -135,11 +135,21 @@ export const updateOrderStatus = async (req, res) => {
     const { orderId } = req.params;
     const { status } = req.body;
     
-    const order = await Order.findByIdAndUpdate(
-      orderId,
-      { status },
-      { new: true }
-    );
+    const valid = ['placed', 'paid', 'packed', 'shipped', 'delivered', 'cancelled'];
+    if (!valid.includes(status)) {
+      return res.status(400).json({ message: 'Invalid status' });
+    }
+    const updateData = { status };
+    if (['paid', 'packed', 'shipped', 'delivered'].includes(status)) {
+      updateData.isPaid = true;
+      updateData.paidAt = new Date();
+    }
+    if (status === 'delivered') {
+      updateData.isDelivered = true;
+      updateData.deliveredAt = new Date();
+    }
+
+    const order = await Order.findByIdAndUpdate(orderId, updateData, { new: true });
     
     if (!order) {
       return res.status(404).json({ message: 'Order not found' });

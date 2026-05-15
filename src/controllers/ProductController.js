@@ -1,11 +1,32 @@
 import Product from "../models/Product.js";
+import Order from "../models/Order.js";
 
 export const getProducts = async (req, res) => {
   try {
-    console.log('Fetching all products...');
-    const products = await Product.find();
-    console.log(`Found ${products.length} products`);
-    res.json(products);
+    const page = Math.max(1, Number(req.query.page) || 1);
+    const limit = Math.max(1, Math.min(50, Number(req.query.limit) || 12));
+    const query = {};
+
+    if (req.query.category) query.category = req.query.category;
+    if (req.query.brand) query.brand = req.query.brand;
+    if (req.query.inStock === "true") query.stock = { $gt: 0 };
+
+    const skip = (page - 1) * limit;
+    const [products, total] = await Promise.all([
+      Product.find(query).sort({ createdAt: -1 }).skip(skip).limit(limit),
+      Product.countDocuments(query),
+    ]);
+
+    res.json({
+      products,
+      pagination: {
+        page,
+        limit,
+        total,
+        totalPages: Math.ceil(total / limit),
+        hasNextPage: skip + products.length < total,
+      },
+    });
   } catch (err) {
     console.error('Error fetching products:', err.message);
     res.status(500).json({ message: err.message });
@@ -130,3 +151,62 @@ export const updateProduct =async(req,res)=>{
     res.status(400).json({ message: err.message });
   }
 }
+
+export const addProductReview = async (req, res) => {
+  try {
+    const { rating, comment } = req.body;
+    const productId = req.params.id;
+
+    if (!rating || !comment) {
+      return res.status(400).json({ message: "rating and comment are required" });
+    }
+
+    const [product, hasPurchased] = await Promise.all([
+      Product.findById(productId),
+      Order.exists({
+        user: req.user._id,
+        status: { $in: ["paid", "packed", "shipped", "delivered"] },
+        "items.product": productId,
+      }),
+    ]);
+
+    if (!product) {
+      return res.status(404).json({ message: "Product not found" });
+    }
+
+    if (!hasPurchased) {
+      return res.status(403).json({ message: "Only verified buyers can review this product" });
+    }
+
+    const alreadyReviewed = product.reviews.find(
+      (review) => review.user.toString() === req.user._id.toString()
+    );
+
+    if (alreadyReviewed) {
+      return res.status(400).json({ message: "You have already reviewed this product" });
+    }
+
+    product.reviews.push({
+      user: req.user._id,
+      name: req.user.fullName || req.user.email,
+      rating: Number(rating),
+      comment: String(comment).trim(),
+    });
+
+    product.numReviews = product.reviews.length;
+    product.rating =
+      product.reviews.reduce((sum, review) => sum + review.rating, 0) / product.numReviews;
+
+    await product.save();
+
+    return res.status(201).json({
+      message: "Review added",
+      reviews: product.reviews,
+      rating: product.rating,
+      numReviews: product.numReviews,
+    });
+  } catch (error) {
+    console.error("Error adding product review:", error);
+    return res.status(500).json({ message: "Failed to add review" });
+  }
+};

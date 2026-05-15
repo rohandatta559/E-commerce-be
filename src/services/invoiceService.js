@@ -7,6 +7,9 @@ const formatAmount = (value) =>
     maximumFractionDigits: 2
   }).format(Number(value || 0));
 
+const CGST_RATE = 0.18;
+const SGST_RATE = 0.18;
+
 // Generate an invoice PDF as a Buffer
 export const generateInvoicePDF = async (order) => {
   return new Promise((resolve, reject) => {
@@ -105,19 +108,23 @@ export const generateInvoicePDF = async (order) => {
         doc.addPage();
         summaryY = 80;
       }
-      doc.rect(335, summaryY - 10, 210, 112).lineWidth(1).strokeColor('#111827').stroke();
+      const cgstPrice = Number(order.cgstPrice ?? (Number(order.itemsPrice || 0) * CGST_RATE));
+      const sgstPrice = Number(order.sgstPrice ?? (Number(order.itemsPrice || 0) * SGST_RATE));
+      doc.rect(335, summaryY - 10, 210, 136).lineWidth(1).strokeColor('#111827').stroke();
       doc.fontSize(12).fillColor('#111827')
         .text('Subtotal:', 350, summaryY)
         .text(formatAmount(order.itemsPrice), 455, summaryY, { width: 80, align: 'right' })
-        .text('Tax:', 350, summaryY + 24)
-        .text(formatAmount(order.taxPrice), 455, summaryY + 24, { width: 80, align: 'right' })
-        .text('Shipping:', 350, summaryY + 48)
-        .text(formatAmount(order.shippingPrice), 455, summaryY + 48, { width: 80, align: 'right' });
+        .text('CGST (18%):', 350, summaryY + 24)
+        .text(formatAmount(cgstPrice), 455, summaryY + 24, { width: 80, align: 'right' })
+        .text('SGST (18%):', 350, summaryY + 48)
+        .text(formatAmount(sgstPrice), 455, summaryY + 48, { width: 80, align: 'right' })
+        .text('Shipping:', 350, summaryY + 72)
+        .text(formatAmount(order.shippingPrice), 455, summaryY + 72, { width: 80, align: 'right' });
 
-      doc.rect(335, summaryY + 74, 210, 28).fill('#6d28d9');
+      doc.rect(335, summaryY + 98, 210, 28).fill('#6d28d9');
       doc.fontSize(13).fillColor('#ffffff')
-        .text('TOTAL:', 350, summaryY + 82)
-        .text(formatAmount(order.totalPrice), 455, summaryY + 82, { width: 80, align: 'right' });
+        .text('TOTAL:', 350, summaryY + 106)
+        .text(formatAmount(order.totalPrice), 455, summaryY + 106, { width: 80, align: 'right' });
 
       // Footer
       const footerY = 760;

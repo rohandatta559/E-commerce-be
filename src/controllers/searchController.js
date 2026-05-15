@@ -15,7 +15,7 @@ export const searchProducts = async (req, res) => {
       limit = 10
     } = req.query;
 
-    const result = await Product.search(query, {
+    let result = await Product.search(query, {
       category,
       brand,
       minPrice,
@@ -26,6 +26,47 @@ export const searchProducts = async (req, res) => {
       page: parseInt(page, 10),
       limit: parseInt(limit, 10)
     });
+
+    // Typo-tolerant fallback: broad regex when text search yields no result.
+    if (query && result.total === 0) {
+      const safePattern = query
+        .trim()
+        .split(/\s+/)
+        .map((chunk) => chunk.slice(0, 3))
+        .filter(Boolean)
+        .join(".*");
+
+      if (safePattern) {
+        const regex = new RegExp(safePattern, "i");
+        const fallbackFilter = {
+          $or: [{ name: regex }, { description: regex }, { category: regex }, { brand: regex }],
+        };
+        if (category) fallbackFilter.category = category;
+        if (brand) fallbackFilter.brand = brand;
+        if (inStock === "true") fallbackFilter.stock = { $gt: 0 };
+        if (minPrice || maxPrice) {
+          fallbackFilter.price = {};
+          if (minPrice) fallbackFilter.price.$gte = Number(minPrice);
+          if (maxPrice) fallbackFilter.price.$lte = Number(maxPrice);
+        }
+
+        const pageNum = parseInt(page, 10);
+        const limitNum = parseInt(limit, 10);
+        const skip = (pageNum - 1) * limitNum;
+        const [products, total] = await Promise.all([
+          Product.find(fallbackFilter).sort({ createdAt: -1 }).skip(skip).limit(limitNum),
+          Product.countDocuments(fallbackFilter),
+        ]);
+        result = {
+          products,
+          total,
+          totalPages: Math.ceil(total / limitNum),
+          currentPage: pageNum,
+          hasNextPage: pageNum * limitNum < total,
+          hasPreviousPage: pageNum > 1,
+        };
+      }
+    }
 
     res.json({
       success: true,

@@ -1,5 +1,7 @@
 import mongoose from 'mongoose';
 
+const ORDER_STATUSES = ['placed', 'paid', 'packed', 'shipped', 'delivered', 'cancelled'];
+
 const orderSchema = new mongoose.Schema({
   user: {
     type: mongoose.Schema.Types.ObjectId,
@@ -36,6 +38,12 @@ const orderSchema = new mongoose.Schema({
     type: String,
     required: true
   },
+  status: {
+    type: String,
+    enum: ORDER_STATUSES,
+    default: 'placed',
+    index: true
+  },
   paymentResult: {
     id: { type: String },
     status: { type: String },
@@ -49,6 +57,16 @@ const orderSchema = new mongoose.Schema({
     default: 0.0
   },
   taxPrice: {
+    type: Number,
+    required: true,
+    default: 0.0
+  },
+  cgstPrice: {
+    type: Number,
+    required: true,
+    default: 0.0
+  },
+  sgstPrice: {
     type: Number,
     required: true,
     default: 0.0
@@ -78,11 +96,36 @@ const orderSchema = new mongoose.Schema({
   },
   deliveredAt: {
     type: Date
+  },
+  discount: {
+    code: { type: String, trim: true, uppercase: true },
+    type: { type: String, enum: ['percentage', 'flat'] },
+    value: { type: Number, default: 0 },
+    amount: { type: Number, default: 0 }
   }
 }, {
   timestamps: true
 });
 
+orderSchema.pre('save', function(next) {
+  if (this.status === 'paid' || this.status === 'packed' || this.status === 'shipped' || this.status === 'delivered') {
+    this.isPaid = true;
+    this.paidAt = this.paidAt || new Date();
+  }
+
+  if (this.status === 'delivered') {
+    this.isDelivered = true;
+    this.deliveredAt = this.deliveredAt || new Date();
+  }
+
+  if (this.status === 'cancelled') {
+    this.isDelivered = false;
+  }
+
+  next();
+});
+
 const Order = mongoose.model('Order', orderSchema);
 
 export default Order;
+export { ORDER_STATUSES };

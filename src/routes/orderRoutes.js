@@ -1,5 +1,6 @@
 import express from 'express';
 import { protect } from '../middleware/authMiddleware.js';
+import { admin } from '../middleware/adminMiddleware.js';
 import { 
   createOrder, 
   getOrderById, 
@@ -7,9 +8,11 @@ import {
   getMyOrders,
   getOrderStats,
   markOrderPaid,
+  markOrderDelivered,
   getOrderInvoice,
   sendOrderInvoiceEmail,
-  getAllOrders
+  getAllOrders,
+  updateOrderStatus
 } from '../controllers/orderController.js';
 
 const router = express.Router();
@@ -28,7 +31,8 @@ router.route('/')
 router.get('/stats/overview', getOrderStats);
 
 // Admin routes
-router.get('/all', getAllOrders);
+router.get('/all', admin, getAllOrders);
+router.put('/:orderId/status', admin, updateOrderStatus);
 
 // Get order by ID
 router.get('/:id', getOrderById);
@@ -38,6 +42,7 @@ router.put('/:id/pay', updateOrderToPaid);
 
 // Mark order as paid (admin)
 router.post('/:orderId/pay', markOrderPaid);
+router.put('/:orderId/deliver', markOrderDelivered);
 
 // Download invoice
 router.get('/:orderId/invoice', getOrderInvoice);

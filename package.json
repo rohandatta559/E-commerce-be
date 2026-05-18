@@ -30,6 +30,7 @@
     "nodemailer": "^7.0.13",
     "pdfkit": "^0.17.2",
     "redis": "^5.8.2",
+    "swagger-ui-express": "^5.0.1",
     "uniqid": "^5.4.0",
     "uuid": "^13.0.0",
     "xss-clean": "^0.1.4"

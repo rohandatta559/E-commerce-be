@@ -5,6 +5,9 @@ import {
   getSalesAnalytics, 
   getUsers, 
   getProducts, 
+  createProduct,
+  updateProduct,
+  deleteProduct,
   getOrders, 
   updateOrderStatus 
 } from '../controllers/adminController.js';
@@ -23,6 +26,9 @@ router.get('/users', getUsers);
 
 // Product Management Routes
 router.get('/products', getProducts);
+router.post('/products', createProduct);
+router.put('/products/:productId', updateProduct);
+router.delete('/products/:productId', deleteProduct);
 
 // Order Management Routes
 router.get('/orders', getOrders);

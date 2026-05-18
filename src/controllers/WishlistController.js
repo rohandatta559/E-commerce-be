@@ -67,7 +67,7 @@ export const removeFromWishlist = async (req, res) => {
 export const getWishlist = async (req, res) => {
   try {
     const user = await User.findById(req.user._id)
-      .populate('wishlist.product', 'name price images')
+      .populate('wishlist.product', 'name price image images category stock variants')
       .select('wishlist');
 
     if (!user) {

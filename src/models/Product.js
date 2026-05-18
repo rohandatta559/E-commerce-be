@@ -68,6 +68,8 @@ const productSchema = new mongoose.Schema(
     image: { 
       type: String 
     },
+    images: [{ type: String }],
+    video: { type: String },
     rating: {
       type: Number,
       default: 0,

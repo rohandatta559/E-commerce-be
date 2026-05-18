@@ -2,9 +2,11 @@
 import express from 'express';
 import dotenv from 'dotenv';
 import cors from 'cors';
+import swaggerUi from 'swagger-ui-express';
 import connectDB from './config/db.js';
 import { securityMiddleware, csrfProtection } from './middleware/securityMiddleware.js';
 import cookieParser from 'cookie-parser';
+import swaggerSpec from './config/swagger.js';
 
 // Import routes
 import productRoutes from './routes/ProductRoutes.js';
@@ -67,6 +69,8 @@ app.get('/api/health', (req, res) => {
     timestamp: new Date().toISOString()
   });
 });
+
+app.use('/api-docs', swaggerUi.serve, swaggerUi.setup(swaggerSpec));
 
 // Security middleware
 app.use(securityMiddleware);

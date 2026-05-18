@@ -13,6 +13,7 @@ const formatINR = (value) =>
 const CGST_RATE = 0.18;
 const SGST_RATE = 0.18;
 const ACTIVE_PURCHASE_STATUSES = ["paid", "packed", "shipped", "delivered"];
+const FIRST_ORDER_ELIGIBLE_STATUSES = ["placed", "paid", "packed", "shipped", "delivered"];
 
 const applyLifecycleFields = (order, nextStatus) => {
   order.status = nextStatus;
@@ -24,6 +25,15 @@ const applyLifecycleFields = (order, nextStatus) => {
     order.isDelivered = true;
     order.deliveredAt = order.deliveredAt || new Date();
   }
+};
+
+const hasUserUsedCoupon = (coupon, userId) =>
+  Array.isArray(coupon.usedByUsers) &&
+  coupon.usedByUsers.some((id) => String(id) === String(userId));
+
+const isCouponAssignedToUser = (coupon, userId) => {
+  if (!Array.isArray(coupon.assignedUsers) || coupon.assignedUsers.length === 0) return true;
+  return coupon.assignedUsers.some((id) => String(id) === String(userId));
 };
 
 export const createOrder = async (req, res) => {
@@ -51,23 +61,60 @@ export const createOrder = async (req, res) => {
     const orderItems = [];
     for (const item of items) {
       const quantity = Number(item.quantity);
+      const variantId = item.variantId?.toString?.();
       if (!item.product || !quantity || quantity < 1) {
         throw new Error("Invalid order item payload");
       }
 
-      const product = await Product.findOneAndUpdate(
-        { _id: item.product, stock: { $gte: quantity } },
-        { $inc: { stock: -quantity } },
-        { new: true, ...sessionOptions }
-      );
+      let product;
+      let selectedVariant = null;
+
+      if (variantId) {
+        product = await Product.findOneAndUpdate(
+          {
+            _id: item.product,
+            variants: {
+              $elemMatch: {
+                _id: new mongoose.Types.ObjectId(variantId),
+                stock: { $gte: quantity },
+              },
+            },
+          },
+          { $inc: { "variants.$.stock": -quantity } },
+          { new: true, ...sessionOptions }
+        );
+
+        if (product) {
+          selectedVariant = product.variants.find((variant) => String(variant._id) === String(variantId));
+        }
+      } else {
+        product = await Product.findOneAndUpdate(
+          { _id: item.product, stock: { $gte: quantity } },
+          { $inc: { stock: -quantity } },
+          { new: true, ...sessionOptions }
+        );
+      }
 
       if (!product) {
-        throw new Error(`Insufficient stock for product ${item.product}`);
+        throw new Error(variantId ? `Insufficient variant stock for product ${item.product}` : `Insufficient stock for product ${item.product}`);
+      }
+
+      if (variantId && !selectedVariant) {
+        throw new Error(`Variant ${variantId} not found for product ${item.product}`);
       }
       orderItems.push({
         product: product._id,
+        variantId: variantId || undefined,
+        variant: selectedVariant
+          ? {
+              label: selectedVariant.label,
+              sku: selectedVariant.sku,
+              size: selectedVariant.size,
+              color: selectedVariant.color,
+            }
+          : undefined,
         quantity,
-        price: Number(product.price),
+        price: Number(selectedVariant?.price ?? product.price),
       });
     }
 
@@ -86,6 +133,16 @@ export const createOrder = async (req, res) => {
       if (!coupon) throw new Error("Invalid coupon code");
       if (coupon.expiresAt < new Date()) throw new Error("Coupon has expired");
       if (coupon.usageLimit && coupon.usedCount >= coupon.usageLimit) throw new Error("Coupon usage limit reached");
+      if (!isCouponAssignedToUser(coupon, req.user._id)) throw new Error("This coupon is not assigned to your account");
+      if (coupon.onePerUser && hasUserUsedCoupon(coupon, req.user._id)) throw new Error("You have already used this coupon");
+      if (coupon.isFirstOrderOnly) {
+        const priorOrderQuery = Order.exists({
+          user: req.user._id,
+          status: { $in: FIRST_ORDER_ELIGIBLE_STATUSES },
+        });
+        const priorOrder = session ? await priorOrderQuery.session(session) : await priorOrderQuery;
+        if (priorOrder) throw new Error("This coupon is valid only for first-time orders");
+      }
       if (itemsPrice < coupon.minOrderValue) throw new Error(`Minimum order value is ${coupon.minOrderValue}`);
 
       discountAmount =
@@ -97,6 +154,9 @@ export const createOrder = async (req, res) => {
 
       discount = { code: coupon.code, type: coupon.type, value: coupon.value, amount: discountAmount };
       coupon.usedCount += 1;
+      if (!hasUserUsedCoupon(coupon, req.user._id)) {
+        coupon.usedByUsers.push(req.user._id);
+      }
       await coupon.save(sessionOptions);
     }
 

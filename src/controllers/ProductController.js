@@ -1,6 +1,21 @@
 import Product from "../models/Product.js";
 import Order from "../models/Order.js";
 
+const normalizeVariants = (variants = []) => {
+  if (!Array.isArray(variants)) return [];
+  return variants
+    .map((variant) => ({
+      label: variant?.label?.toString().trim() || "",
+      sku: variant?.sku?.toString().trim() || "",
+      size: variant?.size?.toString().trim() || "",
+      color: variant?.color?.toString().trim() || "",
+      price: Number.isNaN(Number(variant?.price)) ? undefined : Number(variant.price),
+      stock: Number.isNaN(Number(variant?.stock)) ? 0 : Number(variant.stock),
+      image: variant?.image?.toString().trim() || "",
+    }))
+    .filter((variant) => variant.label || variant.sku || variant.size || variant.color);
+};
+
 export const getProducts = async (req, res) => {
   try {
     const page = Math.max(1, Number(req.query.page) || 1);
@@ -9,7 +24,9 @@ export const getProducts = async (req, res) => {
 
     if (req.query.category) query.category = req.query.category;
     if (req.query.brand) query.brand = req.query.brand;
-    if (req.query.inStock === "true") query.stock = { $gt: 0 };
+    if (req.query.inStock === "true") {
+      query.$or = [{ stock: { $gt: 0 } }, { "variants.stock": { $gt: 0 } }];
+    }
 
     const skip = (page - 1) * limit;
     const [products, total] = await Promise.all([
@@ -46,10 +63,21 @@ export const getProductById = async (req, res) => {
 };
 
 export const createProduct = async (req, res) => {
-  const { name, price, description, category, stock } = req.body;
+  const { name, price, description, category, stock, brand, image, attributes, variants } = req.body;
   try {
-    console.log('Creating new product:', { name, price, description, category, stock });
-    const product = new Product({ name, price, description, category, stock });
+    const normalizedVariants = normalizeVariants(variants);
+    console.log('Creating new product:', { name, price, description, category, stock, variantCount: normalizedVariants.length });
+    const product = new Product({
+      name,
+      price,
+      description,
+      category,
+      stock,
+      brand,
+      image,
+      attributes: Array.isArray(attributes) ? attributes : [],
+      variants: normalizedVariants
+    });
     const savedProduct = await product.save();
     console.log('Product created successfully:', savedProduct);
     res.status(201).json(savedProduct);
@@ -97,6 +125,7 @@ export const createProductsBulk = async (req, res) => {
         numReviews: Number.isNaN(Number(item.numReviews)) ? 0 : Number(item.numReviews),
         isActive: item.isActive !== false,
         attributes: Array.isArray(item.attributes) ? item.attributes : [],
+        variants: normalizeVariants(item.variants),
       });
     });
 
@@ -140,10 +169,25 @@ export const deleteProduct = async (req, res) => {
 };
 
 export const updateProduct =async(req,res)=>{
-  const { name, price, description, category, stock } = req.body;
+  const { name, price, description, category, stock, brand, image, attributes, variants } = req.body;
   try {
-    console.log('Updating product:', { name, price, description, category, stock });
-    const product = await Product.findOneAndUpdate({ name }, { name, price, description, category, stock });
+    const normalizedVariants = normalizeVariants(variants);
+    console.log('Updating product:', { name, price, description, category, stock, variantCount: normalizedVariants.length });
+    const product = await Product.findOneAndUpdate(
+      { name },
+      {
+        name,
+        price,
+        description,
+        category,
+        stock,
+        brand,
+        image,
+        attributes: Array.isArray(attributes) ? attributes : [],
+        variants: normalizedVariants
+      },
+      { new: true }
+    );
     console.log('Product updated successfully:', product);
     res.status(201).json(product);
   } catch (err) {

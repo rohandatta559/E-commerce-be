@@ -26,6 +26,15 @@ const orderSchema = new mongoose.Schema({
     price: {
       type: Number,
       required: true
+    },
+    variantId: {
+      type: String
+    },
+    variant: {
+      label: { type: String, trim: true },
+      sku: { type: String, trim: true },
+      size: { type: String, trim: true },
+      color: { type: String, trim: true }
     }
   }],
   shippingAddress: {

@@ -14,6 +14,26 @@ const reviewSchema = new mongoose.Schema(
   { timestamps: true }
 );
 
+const productVariantSchema = new mongoose.Schema(
+  {
+    label: { type: String, trim: true },
+    sku: { type: String, trim: true },
+    size: { type: String, trim: true },
+    color: { type: String, trim: true },
+    price: {
+      type: Number,
+      min: 0
+    },
+    stock: {
+      type: Number,
+      default: 0,
+      min: 0
+    },
+    image: { type: String }
+  },
+  { _id: true }
+);
+
 const productSchema = new mongoose.Schema(
   {
     name: { 
@@ -44,6 +64,7 @@ const productSchema = new mongoose.Schema(
       default: 0,
       min: 0
     },
+    variants: [productVariantSchema],
     image: { 
       type: String 
     },
@@ -75,6 +96,13 @@ const productSchema = new mongoose.Schema(
     toObject: { virtuals: true }
   }
 );
+
+productSchema.virtual('availableStock').get(function availableStock() {
+  if (Array.isArray(this.variants) && this.variants.length > 0) {
+    return this.variants.reduce((sum, variant) => sum + Number(variant.stock || 0), 0);
+  }
+  return Number(this.stock || 0);
+});
 
 // Create text index for search
 productSchema.index({ 
@@ -124,7 +152,7 @@ productSchema.statics.search = async function(query, filters = {}) {
 
   // Stock filter
   if (inStock === 'true') {
-    searchQuery.stock = { $gt: 0 };
+    searchQuery.$or = [{ stock: { $gt: 0 } }, { 'variants.stock': { $gt: 0 } }];
   }
 
   const sortOptions = {};

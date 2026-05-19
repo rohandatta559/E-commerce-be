@@ -275,11 +275,25 @@ export const updateOrderStatus = async (req, res) => {
       updateData.deliveredAt = new Date();
     }
 
-    const order = await Order.findByIdAndUpdate(orderId, updateData, { new: true });
+    const order = await Order.findById(orderId);
     
     if (!order) {
       return res.status(404).json({ message: 'Order not found' });
     }
+
+    Object.assign(order, updateData);
+    order.shipment = order.shipment || {};
+    order.shipment.status = status === 'cancelled' ? 'cancelled' : status;
+    order.shipment.timeline = Array.isArray(order.shipment.timeline) ? order.shipment.timeline : [];
+    order.shipment.timeline.push({
+      status: order.shipment.status,
+      description: `Order status changed to ${status}`,
+      source: 'admin',
+      courier: order.shipment.courier,
+      trackingId: order.shipment.trackingId,
+      timestamp: new Date(),
+    });
+    await order.save();
     
     res.json(order);
   } catch (error) {

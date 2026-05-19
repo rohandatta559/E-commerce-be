@@ -14,6 +14,14 @@ const CGST_RATE = 0.18;
 const SGST_RATE = 0.18;
 const ACTIVE_PURCHASE_STATUSES = ["paid", "packed", "shipped", "delivered"];
 const FIRST_ORDER_ELIGIBLE_STATUSES = ["placed", "paid", "packed", "shipped", "delivered"];
+const SHIPMENT_STATUS_BY_ORDER_STATUS = {
+  placed: 'placed',
+  paid: 'paid',
+  packed: 'packed',
+  shipped: 'shipped',
+  delivered: 'delivered',
+  cancelled: 'cancelled',
+};
 
 const applyLifecycleFields = (order, nextStatus) => {
   order.status = nextStatus;
@@ -25,6 +33,31 @@ const applyLifecycleFields = (order, nextStatus) => {
     order.isDelivered = true;
     order.deliveredAt = order.deliveredAt || new Date();
   }
+};
+
+const appendShipmentEvent = (order, {
+  status,
+  description,
+  location,
+  source = 'system',
+  courier,
+  trackingId,
+  timestamp = new Date(),
+}) => {
+  order.shipment = order.shipment || {};
+  order.shipment.timeline = Array.isArray(order.shipment.timeline) ? order.shipment.timeline : [];
+  order.shipment.status = status || order.shipment.status || 'placed';
+  if (courier !== undefined) order.shipment.courier = courier;
+  if (trackingId !== undefined) order.shipment.trackingId = trackingId;
+  order.shipment.timeline.push({
+    status: order.shipment.status,
+    description: description || undefined,
+    location: location || undefined,
+    source,
+    courier: order.shipment.courier,
+    trackingId: order.shipment.trackingId,
+    timestamp,
+  });
 };
 
 const hasUserUsedCoupon = (coupon, userId) =>
@@ -178,6 +211,17 @@ export const createOrder = async (req, res) => {
           totalPrice,
           discount,
           status: paymentMethod.toLowerCase() === "cod" ? "placed" : "paid",
+          shipment: {
+            status: paymentMethod.toLowerCase() === "cod" ? "placed" : "paid",
+            timeline: [
+              {
+                status: paymentMethod.toLowerCase() === "cod" ? "placed" : "paid",
+                description: paymentMethod.toLowerCase() === "cod" ? "Order placed successfully" : "Payment received and order placed",
+                source: 'system',
+                timestamp: new Date(),
+              },
+            ],
+          },
         },
       ],
       sessionOptions
@@ -308,6 +352,11 @@ export const updateOrderToPaid = async (req, res) => {
     const order = await Order.findById(req.params.id);
     if (!order) return res.status(404).json({ message: "Order not found" });
     applyLifecycleFields(order, "paid");
+    appendShipmentEvent(order, {
+      status: SHIPMENT_STATUS_BY_ORDER_STATUS.paid,
+      description: 'Payment confirmed',
+      source: 'system',
+    });
     order.paymentResult = {
       id: req.body.id || "payment_id",
       status: req.body.status || "completed",
@@ -331,6 +380,11 @@ export const markOrderPaid = async (req, res) => {
       return res.status(403).json({ message: "Not authorized" });
     }
     applyLifecycleFields(order, "paid");
+    appendShipmentEvent(order, {
+      status: SHIPMENT_STATUS_BY_ORDER_STATUS.paid,
+      description: 'Order marked paid by user/admin',
+      source: req.user.role === 'admin' ? 'admin' : 'system',
+    });
     if (req.body.paymentResult) order.paymentResult = req.body.paymentResult;
     await order.save();
     return res.json({ success: true, message: "Order marked as paid", order });
@@ -348,6 +402,11 @@ export const markOrderDelivered = async (req, res) => {
       return res.status(403).json({ message: "Not authorized" });
     }
     applyLifecycleFields(order, "delivered");
+    appendShipmentEvent(order, {
+      status: SHIPMENT_STATUS_BY_ORDER_STATUS.delivered,
+      description: 'Order delivered',
+      source: req.user.role === 'admin' ? 'admin' : 'system',
+    });
     await order.save();
     return res.status(200).json({ success: true, message: "Order marked as delivered", order });
   } catch (error) {
@@ -383,11 +442,102 @@ export const updateOrderStatus = async (req, res) => {
     const order = await Order.findById(req.params.orderId);
     if (!order) return res.status(404).json({ message: "Order not found" });
     applyLifecycleFields(order, status);
+    appendShipmentEvent(order, {
+      status: SHIPMENT_STATUS_BY_ORDER_STATUS[status] || 'placed',
+      description: `Order status changed to ${status}`,
+      source: 'admin',
+    });
     await order.save();
     return res.json({ success: true, order });
   } catch (error) {
     console.error("updateOrderStatus error:", error);
     return res.status(500).json({ message: "Error updating status" });
+  }
+};
+
+export const updateShipmentDetails = async (req, res) => {
+  try {
+    if (req.user.role !== "admin") return res.status(403).json({ message: "Admin only" });
+    const { orderId } = req.params;
+    const { courier, trackingId, trackingUrl, shipmentStatus, description, location } = req.body;
+    const order = await Order.findById(orderId);
+    if (!order) return res.status(404).json({ message: "Order not found" });
+
+    order.shipment = order.shipment || {};
+    if (courier !== undefined) order.shipment.courier = courier;
+    if (trackingId !== undefined) order.shipment.trackingId = trackingId;
+    if (trackingUrl !== undefined) order.shipment.trackingUrl = trackingUrl;
+
+    if (shipmentStatus) {
+      appendShipmentEvent(order, {
+        status: shipmentStatus,
+        description: description || `Shipment status updated to ${shipmentStatus}`,
+        location,
+        source: 'admin',
+        courier: order.shipment.courier,
+        trackingId: order.shipment.trackingId,
+      });
+      if (shipmentStatus === 'delivered') {
+        applyLifecycleFields(order, 'delivered');
+      }
+      if (shipmentStatus === 'shipped' && ['placed', 'paid', 'packed'].includes(order.status)) {
+        applyLifecycleFields(order, 'shipped');
+      }
+    }
+
+    await order.save();
+    return res.json({ success: true, order });
+  } catch (error) {
+    console.error("updateShipmentDetails error:", error);
+    return res.status(500).json({ message: "Error updating shipment details" });
+  }
+};
+
+export const shipmentWebhookSync = async (req, res) => {
+  try {
+    const expectedSecret = process.env.SHIPMENT_WEBHOOK_SECRET;
+    if (expectedSecret) {
+      const incomingSecret = req.headers['x-webhook-secret'];
+      if (incomingSecret !== expectedSecret) {
+        return res.status(401).json({ success: false, message: 'Invalid webhook secret' });
+      }
+    }
+
+    const { trackingId, orderId, courier, status, description, location, timestamp, trackingUrl } = req.body || {};
+    if (!status || (!trackingId && !orderId)) {
+      return res.status(400).json({ success: false, message: 'status and orderId/trackingId are required' });
+    }
+
+    const query = orderId ? { _id: orderId } : { 'shipment.trackingId': trackingId };
+    const order = await Order.findOne(query);
+    if (!order) return res.status(404).json({ success: false, message: 'Order not found' });
+
+    order.shipment = order.shipment || {};
+    if (courier !== undefined) order.shipment.courier = courier;
+    if (trackingId !== undefined) order.shipment.trackingId = trackingId;
+    if (trackingUrl !== undefined) order.shipment.trackingUrl = trackingUrl;
+
+    appendShipmentEvent(order, {
+      status,
+      description: description || `Webhook update: ${status}`,
+      location,
+      source: 'webhook',
+      courier: order.shipment.courier,
+      trackingId: order.shipment.trackingId,
+      timestamp: timestamp ? new Date(timestamp) : new Date(),
+    });
+
+    if (status === 'delivered') {
+      applyLifecycleFields(order, 'delivered');
+    } else if (status === 'shipped' && ['placed', 'paid', 'packed'].includes(order.status)) {
+      applyLifecycleFields(order, 'shipped');
+    }
+
+    await order.save();
+    return res.json({ success: true });
+  } catch (error) {
+    console.error("shipmentWebhookSync error:", error);
+    return res.status(500).json({ success: false, message: 'Webhook sync failed' });
   }
 };
 

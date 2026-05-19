@@ -83,6 +83,31 @@ const swaggerSpec = {
         responses: { 201: { description: "Created" } },
       },
     },
+    "/api/orders/{orderId}/shipment": {
+      put: {
+        tags: ["Orders"],
+        summary: "Update shipment details (admin)",
+        security: [{ bearerAuth: [] }],
+        parameters: [
+          {
+            name: "orderId",
+            in: "path",
+            required: true,
+            schema: { type: "string" },
+          },
+        ],
+        requestBody: { required: true },
+        responses: { 200: { description: "Updated" } },
+      },
+    },
+    "/api/orders/webhooks/shipment": {
+      post: {
+        tags: ["Orders"],
+        summary: "Courier webhook shipment status sync",
+        requestBody: { required: true },
+        responses: { 200: { description: "Synced" } },
+      },
+    },
     "/api/coupons/validate": {
       post: {
         tags: ["Coupons"],

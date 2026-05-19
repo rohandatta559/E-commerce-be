@@ -12,12 +12,15 @@ import {
   getOrderInvoice,
   sendOrderInvoiceEmail,
   getAllOrders,
-  updateOrderStatus
+  updateOrderStatus,
+  updateShipmentDetails,
+  shipmentWebhookSync
 } from '../controllers/orderController.js';
 
 const router = express.Router();
 
-// Public routes (if any)
+// Public webhook route
+router.post('/webhooks/shipment', shipmentWebhookSync);
 
 // Protected routes
 router.use(protect);
@@ -33,6 +36,7 @@ router.get('/stats/overview', getOrderStats);
 // Admin routes
 router.get('/all', admin, getAllOrders);
 router.put('/:orderId/status', admin, updateOrderStatus);
+router.put('/:orderId/shipment', admin, updateShipmentDetails);
 
 // Get order by ID
 router.get('/:id', getOrderById);

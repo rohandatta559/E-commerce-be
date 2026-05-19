@@ -1,6 +1,7 @@
 import mongoose from 'mongoose';
 
 const ORDER_STATUSES = ['placed', 'paid', 'packed', 'shipped', 'delivered', 'cancelled'];
+const SHIPMENT_EVENT_STATUSES = ['placed', 'paid', 'packed', 'shipped', 'out_for_delivery', 'delivered', 'cancelled', 'exception'];
 
 const orderSchema = new mongoose.Schema({
   user: {
@@ -46,6 +47,28 @@ const orderSchema = new mongoose.Schema({
   paymentMethod: {
     type: String,
     required: true
+  },
+  shipment: {
+    courier: { type: String, trim: true },
+    trackingId: { type: String, trim: true, index: true },
+    trackingUrl: { type: String, trim: true },
+    status: {
+      type: String,
+      enum: SHIPMENT_EVENT_STATUSES,
+      default: 'placed',
+      index: true
+    },
+    timeline: [
+      {
+        status: { type: String, enum: SHIPMENT_EVENT_STATUSES, required: true },
+        description: { type: String, trim: true },
+        location: { type: String, trim: true },
+        source: { type: String, enum: ['system', 'admin', 'webhook'], default: 'system' },
+        courier: { type: String, trim: true },
+        trackingId: { type: String, trim: true },
+        timestamp: { type: Date, default: Date.now, required: true }
+      }
+    ]
   },
   status: {
     type: String,

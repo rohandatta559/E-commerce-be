@@ -22,6 +22,8 @@ const SHIPMENT_STATUS_BY_ORDER_STATUS = {
   delivered: 'delivered',
   cancelled: 'cancelled',
 };
+const RETURN_REASON_CODES = ['damaged', 'wrong_item', 'not_as_described', 'missing_parts', 'size_issue', 'quality_issue', 'other'];
+const RETURN_DECISION_STATUSES = ['approved', 'rejected', 'picked_up', 'refunded', 'closed'];
 
 const applyLifecycleFields = (order, nextStatus) => {
   order.status = nextStatus;
@@ -56,6 +58,18 @@ const appendShipmentEvent = (order, {
     source,
     courier: order.shipment.courier,
     trackingId: order.shipment.trackingId,
+    timestamp,
+  });
+};
+
+const appendReturnEvent = (order, { status, note, actor = 'system', timestamp = new Date() }) => {
+  order.returnRequest = order.returnRequest || { status: 'none', events: [] };
+  order.returnRequest.events = Array.isArray(order.returnRequest.events) ? order.returnRequest.events : [];
+  order.returnRequest.status = status || order.returnRequest.status || 'none';
+  order.returnRequest.events.push({
+    status: order.returnRequest.status,
+    note: note || undefined,
+    actor,
     timestamp,
   });
 };
@@ -344,6 +358,88 @@ export const getOrderById = async (req, res) => {
   } catch (error) {
     console.error("getOrderById error:", error);
     return res.status(500).json({ message: "Server error" });
+  }
+};
+
+export const requestReturn = async (req, res) => {
+  try {
+    const { orderId } = req.params;
+    const { reasonCode, reasonNote, evidenceUrls = [] } = req.body;
+    const order = await Order.findById(orderId).populate("user", "fullName email _id role");
+    if (!order) return res.status(404).json({ message: "Order not found" });
+    if (String(order.user?._id) !== String(req.user?._id) && req.user?.role !== "admin") {
+      return res.status(401).json({ message: "Not authorized to request return for this order" });
+    }
+    if (order.status !== 'delivered') {
+      return res.status(400).json({ message: "Return can only be requested after delivery" });
+    }
+    if (!RETURN_REASON_CODES.includes(reasonCode)) {
+      return res.status(400).json({ message: "Invalid return reason code" });
+    }
+    if (order.returnRequest?.status && order.returnRequest.status !== 'none' && order.returnRequest.status !== 'rejected' && order.returnRequest.status !== 'closed') {
+      return res.status(400).json({ message: "Return request already active for this order" });
+    }
+
+    const slaHours = Math.max(1, Number(process.env.RETURN_SLA_HOURS || 72));
+    const now = new Date();
+    const slaDueAt = new Date(now.getTime() + slaHours * 60 * 60 * 1000);
+    order.returnRequest = order.returnRequest || {};
+    order.returnRequest.status = 'requested';
+    order.returnRequest.reasonCode = reasonCode;
+    order.returnRequest.reasonNote = reasonNote || '';
+    order.returnRequest.evidenceUrls = Array.isArray(evidenceUrls)
+      ? evidenceUrls.map((url) => String(url).trim()).filter(Boolean)
+      : [];
+    order.returnRequest.requestedAt = now;
+    order.returnRequest.slaDueAt = slaDueAt;
+    order.returnRequest.decisionAt = undefined;
+    order.returnRequest.decisionNote = '';
+    order.returnRequest.refundAmount = undefined;
+    appendReturnEvent(order, {
+      status: 'requested',
+      note: `Return requested (${reasonCode})`,
+      actor: req.user?.role === 'admin' ? 'admin' : 'user',
+      timestamp: now,
+    });
+
+    await order.save();
+    return res.status(201).json({ success: true, order });
+  } catch (error) {
+    console.error("requestReturn error:", error);
+    return res.status(500).json({ message: "Error requesting return" });
+  }
+};
+
+export const updateReturnRequest = async (req, res) => {
+  try {
+    if (req.user.role !== "admin") return res.status(403).json({ message: "Admin only" });
+    const { orderId } = req.params;
+    const { status, decisionNote, refundAmount } = req.body;
+    if (!RETURN_DECISION_STATUSES.includes(status)) {
+      return res.status(400).json({ message: "Invalid return status update" });
+    }
+    const order = await Order.findById(orderId);
+    if (!order) return res.status(404).json({ message: "Order not found" });
+    if (!order.returnRequest || order.returnRequest.status === 'none') {
+      return res.status(400).json({ message: "No active return request on this order" });
+    }
+
+    order.returnRequest.status = status;
+    order.returnRequest.decisionAt = new Date();
+    if (decisionNote !== undefined) order.returnRequest.decisionNote = String(decisionNote || '');
+    if (refundAmount !== undefined && !Number.isNaN(Number(refundAmount))) {
+      order.returnRequest.refundAmount = Number(refundAmount);
+    }
+    appendReturnEvent(order, {
+      status,
+      note: decisionNote || `Return status updated to ${status}`,
+      actor: 'admin',
+    });
+    await order.save();
+    return res.json({ success: true, order });
+  } catch (error) {
+    console.error("updateReturnRequest error:", error);
+    return res.status(500).json({ message: "Error updating return request" });
   }
 };
 

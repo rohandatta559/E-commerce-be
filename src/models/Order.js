@@ -2,6 +2,8 @@ import mongoose from 'mongoose';
 
 const ORDER_STATUSES = ['placed', 'paid', 'packed', 'shipped', 'delivered', 'cancelled'];
 const SHIPMENT_EVENT_STATUSES = ['placed', 'paid', 'packed', 'shipped', 'out_for_delivery', 'delivered', 'cancelled', 'exception'];
+const RETURN_STATUSES = ['none', 'requested', 'approved', 'rejected', 'picked_up', 'refunded', 'closed'];
+const RETURN_REASON_CODES = ['damaged', 'wrong_item', 'not_as_described', 'missing_parts', 'size_issue', 'quality_issue', 'other'];
 
 const orderSchema = new mongoose.Schema({
   user: {
@@ -66,6 +68,33 @@ const orderSchema = new mongoose.Schema({
         source: { type: String, enum: ['system', 'admin', 'webhook'], default: 'system' },
         courier: { type: String, trim: true },
         trackingId: { type: String, trim: true },
+        timestamp: { type: Date, default: Date.now, required: true }
+      }
+    ]
+  },
+  returnRequest: {
+    status: {
+      type: String,
+      enum: RETURN_STATUSES,
+      default: 'none',
+      index: true
+    },
+    reasonCode: {
+      type: String,
+      enum: RETURN_REASON_CODES
+    },
+    reasonNote: { type: String, trim: true },
+    evidenceUrls: [{ type: String, trim: true }],
+    requestedAt: { type: Date },
+    slaDueAt: { type: Date, index: true },
+    decisionAt: { type: Date },
+    decisionNote: { type: String, trim: true },
+    refundAmount: { type: Number, min: 0 },
+    events: [
+      {
+        status: { type: String, enum: RETURN_STATUSES, required: true },
+        note: { type: String, trim: true },
+        actor: { type: String, enum: ['user', 'admin', 'system'], default: 'system' },
         timestamp: { type: Date, default: Date.now, required: true }
       }
     ]

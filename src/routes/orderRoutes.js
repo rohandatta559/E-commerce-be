@@ -14,7 +14,9 @@ import {
   getAllOrders,
   updateOrderStatus,
   updateShipmentDetails,
-  shipmentWebhookSync
+  shipmentWebhookSync,
+  requestReturn,
+  updateReturnRequest
 } from '../controllers/orderController.js';
 
 const router = express.Router();
@@ -37,6 +39,8 @@ router.get('/stats/overview', getOrderStats);
 router.get('/all', admin, getAllOrders);
 router.put('/:orderId/status', admin, updateOrderStatus);
 router.put('/:orderId/shipment', admin, updateShipmentDetails);
+router.post('/:orderId/return-request', requestReturn);
+router.put('/:orderId/return-request', admin, updateReturnRequest);
 
 // Get order by ID
 router.get('/:id', getOrderById);

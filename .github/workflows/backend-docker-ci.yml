@@ -1,0 +1,35 @@
+name: Backend Docker CI
+
+on:
+  push:
+    branches: ["main", "master"]
+  pull_request:
+
+jobs:
+  backend-docker:
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Set up Docker Buildx
+        uses: docker/setup-buildx-action@v3
+
+      - name: Validate backend compose (dev)
+        run: docker compose -f docker-compose.dev.yml config
+
+      - name: Validate backend compose (prod)
+        run: docker compose -f docker-compose.prod.yml config
+
+      - name: Build backend dev image
+        run: docker build -f Dockerfile.dev -t ecommerce-backend-dev:ci .
+
+      - name: Build backend prod image
+        run: docker build -f Dockerfile.prod -t ecommerce-backend-prod:ci .
+
+      - name: Node syntax checks
+        run: |
+          node --check src/server.js
+          node --check src/controllers/orderController.js
+          node

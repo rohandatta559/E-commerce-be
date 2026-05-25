@@ -91,11 +91,14 @@ export const getSalesAnalytics = async (req, res) => {
       .sort({ stock: 1 })
       .limit(20);
 
+    const totalProducts = await Product.countDocuments();
+
     res.json({
       totalSales: totalSales[0]?.total || 0,
       monthlySales: monthlySales[0]?.total || 0,
       topProducts,
       ordersCount: orderSummary?.ordersCount || 0,
+      totalProducts,
       averageOrderValue: Number(aov.toFixed(2)),
       lowStockProducts,
     });

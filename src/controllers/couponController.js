@@ -16,8 +16,15 @@ const hasUserUsedCoupon = (coupon, userId) =>
 
 const isCouponAssignedToUser = (coupon, userId) => {
   if (!Array.isArray(coupon.assignedUsers) || coupon.assignedUsers.length === 0) return true;
-  return coupon.assignedUsers.some((id) => String(id) === String(userId));
+      return coupon.assignedUsers.some((id) => String(id) === String(userId));
 };
+
+const countUserCouponUsage = async (couponCode, userId) =>
+  Order.countDocuments({
+    user: userId,
+    "discount.code": couponCode,
+    status: { $in: ["placed", "paid", "packed", "shipped", "delivered"] },
+  });
 
 const isFirstOrderUser = async (userId) => {
   const existingOrder = await Order.exists({
@@ -29,7 +36,7 @@ const isFirstOrderUser = async (userId) => {
 
 export const validateCoupon = async (req, res) => {
   try {
-    const { code, subtotal } = req.body;
+    const { code, subtotal, categories = [] } = req.body;
     if (!code) {
       return res.status(400).json({ success: false, message: "Coupon code is required" });
     }
@@ -54,6 +61,12 @@ export const validateCoupon = async (req, res) => {
     if (coupon.onePerUser && hasUserUsedCoupon(coupon, req.user._id)) {
       return res.status(400).json({ success: false, message: "You have already used this coupon" });
     }
+    if (coupon.maxUsesPerUser) {
+      const usageCount = await countUserCouponUsage(coupon.code, req.user._id);
+      if (usageCount >= coupon.maxUsesPerUser) {
+        return res.status(400).json({ success: false, message: "Per-user coupon usage limit reached" });
+      }
+    }
 
     if (coupon.isFirstOrderOnly) {
       const firstOrderEligible = await isFirstOrderUser(req.user._id);
@@ -71,6 +84,17 @@ export const validateCoupon = async (req, res) => {
     }
 
     const discountAmount = Number(calculateDiscount(coupon, orderSubtotal).toFixed(2));
+    if (Array.isArray(coupon.appliesToCategories) && coupon.appliesToCategories.length > 0) {
+      const categorySet = new Set(
+        (Array.isArray(categories) ? categories : [])
+          .map((category) => String(category).trim().toLowerCase())
+          .filter(Boolean)
+      );
+      const hasAllowedCategory = coupon.appliesToCategories.some((category) => categorySet.has(String(category).toLowerCase()));
+      if (!hasAllowedCategory) {
+        return res.status(400).json({ success: false, message: "Coupon is not applicable to selected categories" });
+      }
+    }
     return res.json({
       success: true,
       coupon: {
@@ -79,6 +103,7 @@ export const validateCoupon = async (req, res) => {
         value: coupon.value,
         onePerUser: coupon.onePerUser,
         isFirstOrderOnly: coupon.isFirstOrderOnly,
+        appliesToCategories: coupon.appliesToCategories || [],
         discountAmount,
       },
     });
@@ -101,6 +126,8 @@ export const createCoupon = async (req, res) => {
       isActive = true,
       onePerUser = false,
       isFirstOrderOnly = false,
+      maxUsesPerUser,
+      appliesToCategories = [],
       assignedUsers = [],
     } = req.body;
 
@@ -138,7 +165,11 @@ export const createCoupon = async (req, res) => {
       usageLimit: usageLimit === undefined ? undefined : Number(usageLimit),
       isActive: Boolean(isActive),
       onePerUser: Boolean(onePerUser),
+      maxUsesPerUser: maxUsesPerUser === undefined ? undefined : Number(maxUsesPerUser),
       isFirstOrderOnly: Boolean(isFirstOrderOnly),
+      appliesToCategories: Array.isArray(appliesToCategories)
+        ? appliesToCategories.map((category) => String(category).trim().toLowerCase()).filter(Boolean)
+        : [],
       assignedUsers: normalizedAssignedUsers,
       usedByUsers: [],
       usedCount: 0,

@@ -12,9 +12,31 @@ const addressSchema = new mongoose.Schema(
     state: { type: String, trim: true, required: true },
     postalCode: { type: String, trim: true, required: true },
     country: { type: String, trim: true, default: "India" },
+    isDefault: { type: Boolean, default: false },
+    profileId: { type: mongoose.Schema.Types.ObjectId }
+  },
+  { _id: true }
+);
+
+const profileSchema = new mongoose.Schema(
+  {
+    label: { type: String, trim: true, default: "Personal" },
+    fullName: { type: String, trim: true, required: true },
+    email: { type: String, trim: true, lowercase: true },
+    phoneNumber: { type: String, trim: true },
     isDefault: { type: Boolean, default: false }
   },
   { _id: true }
+);
+
+const refreshTokenSchema = new mongoose.Schema(
+  {
+    tokenHash: { type: String, required: true },
+    expiresAt: { type: Date, required: true },
+    userAgent: { type: String, trim: true },
+    ip: { type: String, trim: true }
+  },
+  { _id: true, timestamps: true }
 );
 
 const userSchema = new mongoose.Schema(
@@ -57,12 +79,16 @@ const userSchema = new mongoose.Schema(
   }],
     phoneVerificationExpires: Date,
     fullName: { type: String },
+    googleId: { type: String, trim: true, index: true },
+    authProviders: [{ type: String, enum: ['password', 'google', 'otp'], default: 'password' }],
     role: {
       type: String,
       enum: ['user', 'admin'],
       default: 'user'
     },
-    addresses: [addressSchema]
+    addresses: [addressSchema],
+    profiles: [profileSchema],
+    refreshTokens: [refreshTokenSchema]
   },
   { timestamps: true }
 );

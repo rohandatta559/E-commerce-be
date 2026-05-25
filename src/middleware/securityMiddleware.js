@@ -13,6 +13,22 @@ const limiter = rateLimit({
   message: 'Too many requests from this IP, please try again after 15 minutes'
 });
 
+export const authLimiter = rateLimit({
+  windowMs: 15 * 60 * 1000,
+  max: Number(process.env.AUTH_RATE_LIMIT_MAX || 20),
+  standardHeaders: true,
+  legacyHeaders: false,
+  message: 'Too many authentication attempts. Try again later.'
+});
+
+export const otpLimiter = rateLimit({
+  windowMs: 10 * 60 * 1000,
+  max: Number(process.env.OTP_RATE_LIMIT_MAX || 8),
+  standardHeaders: true,
+  legacyHeaders: false,
+  message: 'Too many OTP requests. Try again in a few minutes.'
+});
+
 // Security headers
 const securityHeaders = [
   helmet(),

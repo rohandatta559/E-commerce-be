@@ -12,7 +12,9 @@ const couponSchema = new mongoose.Schema(
     usageLimit: { type: Number, min: 1 },
     usedCount: { type: Number, default: 0, min: 0 },
     onePerUser: { type: Boolean, default: false },
+    maxUsesPerUser: { type: Number, min: 1 },
     isFirstOrderOnly: { type: Boolean, default: false },
+    appliesToCategories: [{ type: String, trim: true, lowercase: true, index: true }],
     assignedUsers: [
       {
         type: mongoose.Schema.Types.ObjectId,

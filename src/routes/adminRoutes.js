@@ -9,7 +9,8 @@ import {
   updateProduct,
   deleteProduct,
   getOrders, 
-  updateOrderStatus 
+  updateOrderStatus,
+  getLowStockAlerts
 } from '../controllers/adminController.js';
 
 const router = express.Router();
@@ -20,6 +21,7 @@ router.use(admin);
 
 // Analytics Routes
 router.get('/analytics', getSalesAnalytics);
+router.get('/inventory/low-stock', getLowStockAlerts);
 
 // User Management Routes
 router.get('/users', getUsers);

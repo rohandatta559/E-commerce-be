@@ -4,6 +4,7 @@ import Product from "../models/Product.js";
 import Coupon from "../models/Coupon.js";
 import { generateInvoicePDF } from "../services/invoiceService.js";
 import { sendEmailWithAttachment } from "../services/emailService.js";
+import { maybeTriggerLowStockAlert } from "../services/inventoryAlertService.js";
 
 const formatINR = (value) =>
   new Intl.NumberFormat("en-IN", { style: "currency", currency: "INR", maximumFractionDigits: 2 }).format(
@@ -83,6 +84,15 @@ const isCouponAssignedToUser = (coupon, userId) => {
   return coupon.assignedUsers.some((id) => String(id) === String(userId));
 };
 
+const countUserCouponUsage = async (couponCode, userId, session = null) => {
+  const query = Order.countDocuments({
+    user: userId,
+    "discount.code": couponCode,
+    status: { $in: ["placed", "paid", "packed", "shipped", "delivered"] },
+  });
+  return session ? query.session(session) : query;
+};
+
 export const createOrder = async (req, res) => {
   const runCreateOrder = async (session = null) => {
     const sessionOptions = session ? { session } : {};
@@ -106,6 +116,7 @@ export const createOrder = async (req, res) => {
     }
 
     const orderItems = [];
+    const categoriesInCart = new Set();
     for (const item of items) {
       const quantity = Number(item.quantity);
       const variantId = item.variantId?.toString?.();
@@ -133,6 +144,13 @@ export const createOrder = async (req, res) => {
 
         if (product) {
           selectedVariant = product.variants.find((variant) => String(variant._id) === String(variantId));
+          await maybeTriggerLowStockAlert({
+            productId: product._id,
+            productName: product.name,
+            scope: "variant",
+            variantLabel: selectedVariant?.label || selectedVariant?.sku || variantId,
+            stock: Number(selectedVariant?.stock ?? 0),
+          });
         }
       } else {
         product = await Product.findOneAndUpdate(
@@ -140,6 +158,14 @@ export const createOrder = async (req, res) => {
           { $inc: { stock: -quantity } },
           { new: true, ...sessionOptions }
         );
+        if (product) {
+          await maybeTriggerLowStockAlert({
+            productId: product._id,
+            productName: product.name,
+            scope: "product",
+            stock: Number(product.stock ?? 0),
+          });
+        }
       }
 
       if (!product) {
@@ -149,6 +175,7 @@ export const createOrder = async (req, res) => {
       if (variantId && !selectedVariant) {
         throw new Error(`Variant ${variantId} not found for product ${item.product}`);
       }
+      if (product?.category) categoriesInCart.add(String(product.category).trim().toLowerCase());
       orderItems.push({
         product: product._id,
         variantId: variantId || undefined,
@@ -182,6 +209,10 @@ export const createOrder = async (req, res) => {
       if (coupon.usageLimit && coupon.usedCount >= coupon.usageLimit) throw new Error("Coupon usage limit reached");
       if (!isCouponAssignedToUser(coupon, req.user._id)) throw new Error("This coupon is not assigned to your account");
       if (coupon.onePerUser && hasUserUsedCoupon(coupon, req.user._id)) throw new Error("You have already used this coupon");
+      if (coupon.maxUsesPerUser) {
+        const usageCount = await countUserCouponUsage(coupon.code, req.user._id, session);
+        if (usageCount >= coupon.maxUsesPerUser) throw new Error("Per-user coupon usage limit reached");
+      }
       if (coupon.isFirstOrderOnly) {
         const priorOrderQuery = Order.exists({
           user: req.user._id,
@@ -191,6 +222,12 @@ export const createOrder = async (req, res) => {
         if (priorOrder) throw new Error("This coupon is valid only for first-time orders");
       }
       if (itemsPrice < coupon.minOrderValue) throw new Error(`Minimum order value is ${coupon.minOrderValue}`);
+      if (Array.isArray(coupon.appliesToCategories) && coupon.appliesToCategories.length > 0) {
+        const hasAllowedCategory = coupon.appliesToCategories.some((category) => categoriesInCart.has(String(category).toLowerCase()));
+        if (!hasAllowedCategory) {
+          throw new Error("Coupon is not applicable to the categories in this cart");
+        }
+      }
 
       discountAmount =
         coupon.type === "percentage"

@@ -20,6 +20,9 @@ export const protect = async (req, res, next) => {
 
   try {
     const decoded = jwt.verify(token, process.env.JWT_SECRET);
+    if (decoded.tokenType && decoded.tokenType !== 'access') {
+      return res.status(401).json({ message: 'Invalid access token type' });
+    }
     const user = await User.findById(decoded.id).select('-password');
 
     if (!user) {
@@ -29,22 +32,7 @@ export const protect = async (req, res, next) => {
     req.user = user;
     return next();
   } catch (error) {
-    if (error.name === 'TokenExpiredError') {
-      if (headerToken && cookieToken && headerToken !== cookieToken) {
-        try {
-          const decodedFromCookie = jwt.verify(cookieToken, process.env.JWT_SECRET);
-          const user = await User.findById(decodedFromCookie.id).select('-password');
-          if (user) {
-            req.user = user;
-            return next();
-          }
-        } catch {
-          // Ignore and fall through to 401 below.
-        }
-      }
-      return res.status(401).json({ message: 'Session expired. Please log in again.' });
-    }
-
+    if (error.name === 'TokenExpiredError') return res.status(401).json({ message: 'Session expired. Please refresh token.' });
     return res.status(401).json({ message: 'Invalid token. Please log in again.' });
   }
 };

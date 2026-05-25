@@ -76,10 +76,28 @@ export const getSalesAnalytics = async (req, res) => {
       }
     ]);
 
+    const paidStatuses = ['paid', 'packed', 'shipped', 'delivered'];
+    const [orderSummary] = await Order.aggregate([
+      { $match: { status: { $in: paidStatuses } } },
+      { $group: { _id: null, ordersCount: { $sum: 1 }, grossSales: { $sum: '$totalPrice' } } }
+    ]);
+
+    const aov = orderSummary?.ordersCount ? (orderSummary.grossSales / orderSummary.ordersCount) : 0;
+
+    const lowStockProducts = await Product.find({
+      $expr: { $lte: ['$stock', '$lowStockThreshold'] },
+    })
+      .select('name stock lowStockThreshold category brand')
+      .sort({ stock: 1 })
+      .limit(20);
+
     res.json({
       totalSales: totalSales[0]?.total || 0,
       monthlySales: monthlySales[0]?.total || 0,
-      topProducts
+      topProducts,
+      ordersCount: orderSummary?.ordersCount || 0,
+      averageOrderValue: Number(aov.toFixed(2)),
+      lowStockProducts,
     });
   } catch (error) {
     console.error('Sales analytics error:', error);
@@ -135,6 +153,7 @@ export const createProduct = async (req, res) => {
       attributes = [],
       variants = [],
       isActive = true,
+      lowStockThreshold,
     } = req.body;
 
     if (!name || Number.isNaN(Number(price))) {
@@ -160,6 +179,7 @@ export const createProduct = async (req, res) => {
       attributes: normalizedAttributes,
       variants: normalizedVariants,
       isActive: Boolean(isActive),
+      lowStockThreshold: Number.isNaN(Number(lowStockThreshold)) ? undefined : Number(lowStockThreshold),
     });
 
     return res.status(201).json(product);
@@ -185,6 +205,7 @@ export const updateProduct = async (req, res) => {
       attributes,
       variants,
       isActive,
+      lowStockThreshold,
     } = req.body;
 
     const product = await Product.findById(productId);
@@ -204,6 +225,9 @@ export const updateProduct = async (req, res) => {
     if (Array.isArray(attributes)) product.attributes = attributes;
     if (Array.isArray(variants)) product.variants = normalizeVariants(variants);
     if (isActive !== undefined) product.isActive = Boolean(isActive);
+    if (lowStockThreshold !== undefined && !Number.isNaN(Number(lowStockThreshold))) {
+      product.lowStockThreshold = Number(lowStockThreshold);
+    }
 
     await product.save();
     return res.json(product);
@@ -299,5 +323,19 @@ export const updateOrderStatus = async (req, res) => {
   } catch (error) {
     console.error('Update order status error:', error);
     res.status(500).json({ message: 'Error updating order status' });
+  }
+};
+
+export const getLowStockAlerts = async (req, res) => {
+  try {
+    const products = await Product.find({
+      $expr: { $lte: ['$stock', '$lowStockThreshold'] },
+    })
+      .select('name stock lowStockThreshold category brand updatedAt')
+      .sort({ stock: 1, updatedAt: -1 });
+    return res.json({ success: true, count: products.length, products });
+  } catch (error) {
+    console.error('Low stock alerts error:', error);
+    return res.status(500).json({ success: false, message: 'Error fetching low stock alerts' });
   }
 };

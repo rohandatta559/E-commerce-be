@@ -90,7 +90,15 @@ const productSchema = new mongoose.Schema(
         name: String,
         value: String
       }
-    ]
+    ],
+    lowStockThreshold: {
+      type: Number,
+      default: 5,
+      min: 0
+    },
+    lastLowStockAlertAt: {
+      type: Date
+    }
   },
   { 
     timestamps: true,

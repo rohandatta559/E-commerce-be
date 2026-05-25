@@ -7,7 +7,7 @@ import { sendOTP, verifyOTP } from "../services/smsService.js";
 dotenv.config();
 
 const ACCESS_TOKEN_TTL = process.env.JWT_ACCESS_EXPIRES_IN || "15m";
-const REFRESH_TOKEN_TTL_DAYS = Number(process.env.JWT_REFRESH_DAYS || 30);
+const REFRESH_TOKEN_TTL_DAYS = Number(process.env.JWT_REFRESH_DAYS || 15);
 
 const ensureProvider = (user, provider) => {
   user.authProviders = Array.isArray(user.authProviders) ? user.authProviders : [];

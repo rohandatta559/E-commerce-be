@@ -1,4 +1,5 @@
 import { v4 as uuidv4 } from 'uuid';
+import fast2sms from 'fast2sms';
 import User from '../models/User.js';
 
 // For development, we'll log OTPs to console
@@ -39,17 +40,19 @@ export const sendOTP = async (phoneNumber) => {
     }
 
     if (isProduction) {
-      // In production, you would implement actual SMS sending here
-      console.log(`[PRODUCTION] Would send OTP to ${phoneNumber}: ${otp}`);
-      /*
-      // Uncomment and implement actual SMS sending in production:
+      const apiKey = process.env.FAST2SMS_API_KEY;
+      if (!apiKey) {
+        throw new Error('FAST2SMS_API_KEY is missing in environment variables');
+      }
+
       const options = {
-        authorization: process.env.FAST2SMS_API_KEY,
-        message: `Your verification code is ${otp}. Valid for 10 minutes.`,
-        numbers: [phoneNumber]
+        authorization: apiKey,
+        message: `Your verification code is ${otp}. Valid for 5 minutes.`,
+        numbers: [phoneNumber],
       };
+
       const response = await fast2sms.sendMessage(options);
-      */
+      console.log(`[PRODUCTION] SMS sent to ${phoneNumber}`, response);
     } else {
       // In development, just log the OTP
       console.log(`[DEVELOPMENT] OTP for ${phoneNumber}: ${otp}`);

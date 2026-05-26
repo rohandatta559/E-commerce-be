@@ -50,6 +50,11 @@ const orderSchema = new mongoose.Schema({
     type: String,
     required: true
   },
+  payment: {
+    type: mongoose.Schema.Types.ObjectId,
+    ref: 'Payment',
+    index: true,
+  },
   shipment: {
     courier: { type: String, trim: true },
     trackingId: { type: String, trim: true, index: true },

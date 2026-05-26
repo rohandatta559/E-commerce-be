@@ -1,5 +1,6 @@
 import mongoose from "mongoose";
 import Order, { ORDER_STATUSES } from "../models/Order.js";
+import Payment from "../models/Payment.js";
 import Product from "../models/Product.js";
 import Coupon from "../models/Coupon.js";
 import { generateInvoicePDF } from "../services/invoiceService.js";
@@ -73,6 +74,27 @@ const appendReturnEvent = (order, { status, note, actor = 'system', timestamp = 
     actor,
     timestamp,
   });
+};
+
+const recordPayment = async ({ order, userId, amount, currency = 'INR', method = 'other', status = 'completed', transactionId, providerResponse = {}, session = null }) => {
+  const paymentData = {
+    user: userId,
+    order: order._id,
+    amount: Number(amount || 0),
+    currency,
+    method: String(method || 'other').toLowerCase(),
+    status,
+    transactionId: transactionId ? String(transactionId) : undefined,
+    providerResponse,
+    paymentDate: new Date(),
+  };
+
+  const payment = session
+    ? await Payment.create([paymentData], { session })
+    : await Payment.create(paymentData);
+
+  order.payment = Array.isArray(payment) ? payment[0]._id : payment._id;
+  return order.payment;
 };
 
 const hasUserUsedCoupon = (coupon, userId) =>
@@ -278,9 +300,24 @@ export const createOrder = async (req, res) => {
       sessionOptions
     );
 
+    if (paymentMethod.toLowerCase() !== 'cod') {
+      await recordPayment({
+        order: createdOrder,
+        userId: req.user._id,
+        amount: totalPrice,
+        currency: req.body.currency || 'INR',
+        method: paymentMethod,
+        status: 'completed',
+        transactionId: req.body.transactionId,
+        providerResponse: req.body.paymentResult || {},
+        session: sessionOptions?.session || null,
+      });
+    }
+
     const populated = await Order.findById(createdOrder._id)
       .populate("user", "email fullName")
-      .populate("items.product", "name image price");
+      .populate("items.product", "name image price")
+      .populate("payment", "amount currency method status transactionId paymentDate");
 
     try {
       const pdfBuffer = await generateInvoicePDF(populated);
@@ -497,6 +534,18 @@ export const updateOrderToPaid = async (req, res) => {
       email_address: req.body.email_address || req.user.email,
       phoneNumber: req.body.phoneNumber,
     };
+
+    await recordPayment({
+      order,
+      userId: req.user._id,
+      amount: order.totalPrice,
+      currency: req.body.currency || 'INR',
+      method: order.paymentMethod || 'other',
+      status: order.paymentResult.status || 'completed',
+      transactionId: order.paymentResult.id,
+      providerResponse: req.body.paymentResult || order.paymentResult || {},
+    });
+
     await order.save();
     return res.json(order);
   } catch (error) {
@@ -519,6 +568,18 @@ export const markOrderPaid = async (req, res) => {
       source: req.user.role === 'admin' ? 'admin' : 'system',
     });
     if (req.body.paymentResult) order.paymentResult = req.body.paymentResult;
+
+    await recordPayment({
+      order,
+      userId: req.user._id,
+      amount: order.totalPrice,
+      currency: req.body.currency || 'INR',
+      method: order.paymentMethod || 'other',
+      status: order.paymentResult?.status || 'completed',
+      transactionId: order.paymentResult?.id,
+      providerResponse: req.body.paymentResult || order.paymentResult || {},
+    });
+
     await order.save();
     return res.json({ success: true, message: "Order marked as paid", order });
   } catch (error) {
